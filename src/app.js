@@ -13,6 +13,9 @@ window.WL = window.WL || {};
 
   var bookCache = {};
 
+  // 练习模式一轮的题数
+  var PRACTICE_SIZE = 10;
+
   function getBook(id) {
     if (bookCache[id]) return bookCache[id];
     var books = WL.books || [];
@@ -212,6 +215,55 @@ window.WL = window.WL || {};
     render();
   }
 
+  // 练习模式收尾：不计入学习时长日志
+  function finishPractice() {
+    var s = S.session;
+    if (!s) return;
+    s.ended = true;
+    s.phase = 'done';
+    S.view = 'study';
+    render();
+  }
+
+  // 学有余力时的练习模式：随机抽已学词，不计入进度与统计
+  function startPractice(mode) {
+    var book = curBook();
+    if (!book) return;
+    var prog = WL.store.getProgress(book.id);
+    var learned = book.words.filter(function (w) { return prog[w.id]; });
+    if (!learned.length) {
+      toast('先学一些词再来练习');
+      return;
+    }
+    if (learned.length > PRACTICE_SIZE) learned = WL.quiz.shuffle(learned).slice(0, PRACTICE_SIZE);
+
+    S.session = {
+      phase: 'practice',
+      practiceMode: mode === 'cn2en' ? 'cn2en' : 'en2cn',
+      learn: [],
+      li: 0,
+      reviewWids: [],
+      spellQueue: [],
+      items: learned.map(function (w) { return { wid: w.id, from: 'practice', retry: 0 }; }),
+      i: 0,
+      total: learned.length,
+      retryCard: false,
+      bookId: book.id,
+      t0: Date.now(),
+      q: null,
+      answered: null,
+      newDone: {},
+      revDone: {},
+      spokenFor: '',
+      right: 0,
+      wrong: 0,
+      ended: false
+    };
+    S.view = 'study';
+    prepare();
+    render();
+  }
+
   // 一段队列走完之后去哪，由当前阶段决定
   function queueDrained() {
     var s = S.session;
@@ -221,6 +273,8 @@ window.WL = window.WL || {};
     } else if (s.phase === 'quiz') {
       s.li++;
       nextFromLearn();
+    } else if (s.phase === 'practice') {
+      finishPractice();
     } else if (s.phase === 'spell') {
       finishSession();
     } else {
@@ -267,6 +321,9 @@ window.WL = window.WL || {};
 
     if (cur.from === 'spell') {
       type = 'spell';
+    } else if (cur.from === 'practice') {
+      // 练习模式：整轮固定一种题型
+      type = s.practiceMode || 'en2cn';
     } else if (cur.from === 'new') {
       // 刚看完词卡，立刻测「看词选义」：认出刚见过的这个词；
       // 「看义选词」这类回忆词形的题留给复习阶段的产出通道
@@ -284,6 +341,7 @@ window.WL = window.WL || {};
     s.q = q;
 
     if (type === 'audio2cn') WL.quiz.speak(word.w, cfg.sound);
+    if (type === 'spell') WL.quiz.speak(word.w, cfg.sound);
   }
 
   // 答对：只让选项变绿，随即进入下一题，不再追加任何反馈条
@@ -302,7 +360,11 @@ window.WL = window.WL || {};
       }, 420);
     } else {
       setTimeout(function () {
-        if (S.session === s && s.answered && !s.answered.ok) enterRetry();
+        if (S.session === s && s.answered && !s.answered.ok) {
+          // 练习模式答错：停留看一眼正确答案后直接下一题，不退回词卡
+          if (currentItem() && currentItem().from === 'practice') advanceCorrect();
+          else enterRetry();
+        }
       }, 720);
     }
   }
@@ -329,6 +391,11 @@ window.WL = window.WL || {};
     var s = S.session;
     var cur = currentItem();
     if (!cur) return;
+    if (cur.from === 'practice') {
+      // 练习模式：只计对错，不写调度、不记日志、不触发同步
+      if (ok) s.right++; else s.wrong++;
+      return;
+    }
     var now = Date.now();
     var prog = WL.store.getProgress(s.bookId);
     var st = prog[cur.wid];
@@ -517,6 +584,25 @@ window.WL = window.WL || {};
     startCard.appendChild(go);
     wrap.appendChild(startCard);
 
+    // 练习模式：学有余力时的额外巩固，不动进度
+    var pc = el('div', 'card');
+    pc.appendChild(el('h2', 'section', '练习模式'));
+    pc.appendChild(h('<div class="small muted" style="margin-bottom:12px">随机抽 ' + PRACTICE_SIZE +
+      ' 个已学词做巩固练习，答错会展示正确答案；练习不计入学习进度与统计。</div>'));
+    var prow = el('div', 'row');
+    var p1 = el('button', 'btn primary', '看词选义');
+    p1.onclick = function () { startPractice('en2cn'); };
+    prow.appendChild(p1);
+    var p2 = el('button', 'btn', '看义选词');
+    p2.onclick = function () { startPractice('cn2en'); };
+    prow.appendChild(p2);
+    pc.appendChild(prow);
+    if (!learned) {
+      p1.disabled = true;
+      p2.disabled = true;
+    }
+    wrap.appendChild(pc);
+
     if (today.ok + today.bad > 0) {
       var c = el('div', 'card');
       c.appendChild(el('h2', 'section', '今日正确率'));
@@ -558,7 +644,8 @@ window.WL = window.WL || {};
 
     var stage = s.retryCard ? '回顾'
       : s.phase === 'spell' ? '拼写'
-      : s.phase === 'quiz' ? '新学' : '复习';
+      : s.phase === 'quiz' ? '新学'
+      : s.phase === 'practice' ? '练习' : '复习';
     var where;
     if (s.phase === 'quiz') {
       where = '第 ' + (s.li + 1) + ' / ' + s.learn.length + ' 词';
@@ -590,10 +677,18 @@ window.WL = window.WL || {};
 
     if (s.phase === 'spell' && !s.retryCard) {
       var skip = el('button', 'btn ghost block');
-      skip.textContent = '跳过剩余拼写，结束本轮';
+      skip.textContent = '跳过剩余拼写，完成今日学习';
       skip.style.marginTop = '4px';
       skip.onclick = finishSession;
       wrap.appendChild(skip);
+    }
+
+    if (s.phase === 'practice' && !s.retryCard) {
+      var quit = el('button', 'btn ghost block');
+      quit.textContent = '结束练习';
+      quit.style.marginTop = '4px';
+      quit.onclick = finishPractice;
+      wrap.appendChild(quit);
     }
     return wrap;
   }
@@ -626,7 +721,7 @@ window.WL = window.WL || {};
     bar.appendChild(fill);
     wrap.appendChild(bar);
 
-    wrap.appendChild(learnCard(word, '看懂了，测试', function () {
+    wrap.appendChild(learnCard(word, '继续', function () {
       // li 仍指向当前这张卡；advanceFromCard 学完这个词，测完由 queueDrained 里 li++
       advanceFromCard();
     }));
@@ -642,16 +737,16 @@ window.WL = window.WL || {};
     var wrap = el('div', 'stack');
     var card = el('div', 'card');
     card.style.textAlign = 'center';
-    card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">本轮新学完成</div>'));
+    card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">今日新学完成</div>'));
     card.appendChild(h('<div class="muted small">新学了 ' + Object.keys(s.newDone).length +
-      ' 个词。拼写是最牢固的巩固方式，也可以跳过直接结束。</div>'));
+      ' 个词。要进入拼写模式吗？拼写模式只显示中文释义并朗读单词，你来拼写。</div>'));
 
-    var go = el('button', 'btn primary block lg', '开始拼写（' + n + ' 词）');
+    var go = el('button', 'btn primary block lg', '进入拼写模式（' + n + ' 词）');
     go.style.marginTop = '20px';
     go.onclick = startSpell;
     card.appendChild(go);
 
-    var skip = el('button', 'btn ghost block', '跳过拼写，结束本轮');
+    var skip = el('button', 'btn ghost block', '跳过拼写，完成今日学习');
     skip.style.marginTop = '8px';
     skip.onclick = finishSession;
     card.appendChild(skip);
@@ -729,7 +824,7 @@ window.WL = window.WL || {};
     }
     card.appendChild(prompt);
 
-    if (q.sub) {
+    if (q.sub && q.type !== 'spell') {
       var sub = el('div', 'qsub');
       if (q.type === 'audio2cn') {
         var btn = el('button', 'btn ghost', '再听一次');
@@ -743,7 +838,10 @@ window.WL = window.WL || {};
     }
 
     if (q.type === 'spell') {
-      if (q.hint) card.appendChild(el('div', 'qhint', q.hint));
+      // 拼写模式：只显示中文释义，单词音频在出题时自动播放
+      var replay = el('button', 'btn ghost', '再听一次');
+      replay.onclick = function () { WL.quiz.speak(word.w, true); };
+      card.appendChild(replay);
       var box = el('div', 'spellbox');
       var input = el('input');
       input.type = 'text';
@@ -811,23 +909,40 @@ window.WL = window.WL || {};
     var wrap = el('div', 'stack');
     var card = el('div', 'card');
     card.style.textAlign = 'center';
-    var mins = Math.max(1, Math.round((Date.now() - s.t0) / 60000));
     var totalDone = s.right + s.wrong;
-    card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">今天这一轮完成了</div>'));
-    card.appendChild(h('<div class="muted small">用时约 ' + mins + ' 分钟</div>'));
-    card.appendChild(h(
-      '<div class="overview" style="margin-top:20px;text-align:left">' +
-      '<div class="ov-cell"><div class="ov-num">' + Object.keys(s.newDone).length + '</div><div class="ov-label">新学</div></div>' +
-      '<div class="ov-cell"><div class="ov-num">' + Object.keys(s.revDone).length + '</div><div class="ov-label">复习</div></div>' +
-      '<div class="ov-cell"><div class="ov-num">' + s.right + '</div><div class="ov-label">答对</div></div>' +
-      '<div class="ov-cell"><div class="ov-num">' + (totalDone ? Math.round(s.right / totalDone * 100) : 0) + '%</div><div class="ov-label">正确率</div></div>' +
-      '</div>'
-    ));
 
-    var again = el('button', 'btn primary block lg', '再来一组');
-    again.style.marginTop = '20px';
-    again.onclick = startSession;
-    card.appendChild(again);
+    if (s.practiceMode) {
+      card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">这一轮练习完成</div>'));
+      card.appendChild(h('<div class="muted small">练习不计入学习进度</div>'));
+      card.appendChild(h(
+        '<div class="overview" style="margin-top:20px;text-align:left">' +
+        '<div class="ov-cell"><div class="ov-num">' + s.right + '</div><div class="ov-label">答对</div></div>' +
+        '<div class="ov-cell"><div class="ov-num">' + s.wrong + '</div><div class="ov-label">答错</div></div>' +
+        '<div class="ov-cell"><div class="ov-num">' + (totalDone ? Math.round(s.right / totalDone * 100) : 0) + '%</div><div class="ov-label">正确率</div></div>' +
+        '</div>'
+      ));
+      var more = el('button', 'btn primary block lg', '再练一组');
+      more.style.marginTop = '20px';
+      more.onclick = function () { startPractice(s.practiceMode); };
+      card.appendChild(more);
+    } else {
+      var mins = Math.max(1, Math.round((Date.now() - s.t0) / 60000));
+      card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">今天这一轮完成了</div>'));
+      card.appendChild(h('<div class="muted small">用时约 ' + mins + ' 分钟</div>'));
+      card.appendChild(h(
+        '<div class="overview" style="margin-top:20px;text-align:left">' +
+        '<div class="ov-cell"><div class="ov-num">' + Object.keys(s.newDone).length + '</div><div class="ov-label">新学</div></div>' +
+        '<div class="ov-cell"><div class="ov-num">' + Object.keys(s.revDone).length + '</div><div class="ov-label">复习</div></div>' +
+        '<div class="ov-cell"><div class="ov-num">' + s.right + '</div><div class="ov-label">答对</div></div>' +
+        '<div class="ov-cell"><div class="ov-num">' + (totalDone ? Math.round(s.right / totalDone * 100) : 0) + '%</div><div class="ov-label">正确率</div></div>' +
+        '</div>'
+      ));
+
+      var again = el('button', 'btn primary block lg', '再来一组');
+      again.style.marginTop = '20px';
+      again.onclick = startSession;
+      card.appendChild(again);
+    }
 
     var back = el('button', 'btn ghost block', '回到首页');
     back.style.marginTop = '8px';
