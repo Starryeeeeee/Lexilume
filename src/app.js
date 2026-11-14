@@ -1179,16 +1179,16 @@ window.WL = window.WL || {};
     var totalDone = s.right + s.wrong;
 
     if (s.practiceMode) {
-      card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">这一轮练习完成</div>'));
+      card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">本轮练习完成</div>'));
       card.appendChild(h('<div class="muted small">练习不计入学习进度</div>'));
+      card.appendChild(clayArt('sparkles_3d.png'));
       card.appendChild(h(
-        '<div class="overview" style="margin-top:20px;text-align:left">' +
+        '<div class="overview" style="margin-top:20px;grid-template-columns:repeat(3,1fr)">' +
         '<div class="ov-cell"><div class="ov-num">' + s.right + '</div><div class="ov-label">答对</div></div>' +
         '<div class="ov-cell"><div class="ov-num">' + s.wrong + '</div><div class="ov-label">答错</div></div>' +
         '<div class="ov-cell"><div class="ov-num">' + (totalDone ? Math.round(s.right / totalDone * 100) : 0) + '%</div><div class="ov-label">正确率</div></div>' +
         '</div>'
       ));
-      card.appendChild(clayArt('sparkles_3d.png'));
 
       var more = el('button', 'btn primary block lg', '再练一组');
       more.style.marginTop = '20px';
@@ -1196,17 +1196,17 @@ window.WL = window.WL || {};
       card.appendChild(more);
     } else {
       var mins = Math.max(1, Math.round((Date.now() - s.t0) / 60000));
-      card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">今天这一轮完成了</div>'));
+      card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">本轮学习完成</div>'));
       card.appendChild(h('<div class="muted small">用时约 ' + mins + ' 分钟</div>'));
+      card.appendChild(clayArt('trophy_3d.png'));
       card.appendChild(h(
-        '<div class="overview" style="margin-top:20px;text-align:left">' +
+        '<div class="overview" style="margin-top:20px">' +
         '<div class="ov-cell"><div class="ov-num">' + Object.keys(s.newDone).length + '</div><div class="ov-label">新学</div></div>' +
         '<div class="ov-cell"><div class="ov-num">' + Object.keys(s.revDone).length + '</div><div class="ov-label">复习</div></div>' +
         '<div class="ov-cell"><div class="ov-num">' + s.right + '</div><div class="ov-label">答对</div></div>' +
         '<div class="ov-cell"><div class="ov-num">' + (totalDone ? Math.round(s.right / totalDone * 100) : 0) + '%</div><div class="ov-label">正确率</div></div>' +
         '</div>'
       ));
-      card.appendChild(clayArt('trophy_3d.png'));
 
       var again = el('button', 'btn primary block lg', '再来一组');
       again.style.marginTop = '20px';
