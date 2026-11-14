@@ -355,6 +355,7 @@ window.WL = window.WL || {};
     if (!picked) return;
     var ok = !!picked.ok;
     s.answered = { idx: idx, ok: ok };
+    s.answeredAt = Date.now();
     grade(ok);
     render();
     if (ok) {
@@ -962,8 +963,8 @@ window.WL = window.WL || {};
 
       // 拼错过：就地亮出正确拼写，听读音后重新拼，不跳下一词
       if (s.spellMissed) {
-        card.appendChild(h('<div class="spell-correct">拼错了，正确拼写是 <b>' + q.answer + '</b></div>'));
-        card.appendChild(h('<div class="small muted" style="margin-top:6px">再听一遍读音，然后重新输入这个单词</div>'));
+        card.appendChild(h('<div class="spell-reveal"><div class="spell-correct">拼错了，正确拼写是 <b>' + q.answer + '</b></div>' +
+          '<div class="small muted" style="margin-top:6px">再听一遍读音，然后重新输入这个单词</div></div>'));
       }
 
       var box = el('div', 'spellbox');
@@ -999,18 +1000,22 @@ window.WL = window.WL || {};
     }
 
     var opts = el('div', 'options');
+    var isEnPrimary = q.type === 'cn2en' || q.type === 'cloze';
     q.options.forEach(function (o, i) {
       var b = el('button', 'opt');
       b.appendChild(el('span', 'key', String(i + 1)));
-      // 答对后：英文单词叠在中文释义上方，直接在选项内对比，不另起卡片
-      if (s.answered && s.answered.ok && o.src) {
-        var txt2 = el('span', 'txt');
-        txt2.appendChild(el('span', 'opt-en', o.src));
-        txt2.appendChild(el('span', 'opt-zh', o.meaning));
-        b.appendChild(txt2);
+      var txt2 = el('span', 'txt');
+      var answeredOk = s.answered && s.answered.ok && o.src;
+      if (isEnPrimary) {
+        // 主行是英文（看义选词），答对后中文释义从下方平滑展开
+        txt2.appendChild(el('span', 'opt-en', o.text));
+        if (answeredOk) txt2.appendChild(el('span', 'opt-zh opt-add', o.meaning));
       } else {
-        b.appendChild(el('span', 'txt', o.text));
+        // 主行是中文（看词选义），答对后英文单词从上方平滑展开
+        if (answeredOk) txt2.appendChild(el('span', 'opt-en opt-add', o.src));
+        txt2.appendChild(el('span', 'opt-zh', o.text));
       }
+      b.appendChild(txt2);
 
       if (s.answered) {
         if (o.ok) b.classList.add('right');
@@ -1024,11 +1029,11 @@ window.WL = window.WL || {};
     });
     card.appendChild(opts);
 
-    // 答对后的展示时长内，点任意位置可提前进入下一题
+    // 答对后的展示时长内，点任意位置可提前进入下一题（刚答完的短窗口内忽略，防双击误触）
     if (s.answered && s.answered.ok) {
       card.classList.add('answered-ok');
       card.onclick = function () {
-        if (S.session === s && s.answered && s.answered.ok) advanceCorrect();
+        if (S.session === s && s.answered && s.answered.ok && Date.now() - (s.answeredAt || 0) > 600) advanceCorrect();
       };
     }
 
