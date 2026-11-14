@@ -358,9 +358,10 @@ window.WL = window.WL || {};
     grade(ok);
     render();
     if (ok) {
+      // 答对后停留久一点，让用户读完各选项对应的单词与释义；点击任意选项可提前继续
       setTimeout(function () {
         if (S.session === s && s.answered && s.answered.ok) advanceCorrect();
-      }, 420);
+      }, 2600);
     } else {
       setTimeout(function () {
         if (S.session === s && s.answered && !s.answered.ok) {
@@ -901,7 +902,15 @@ window.WL = window.WL || {};
     q.options.forEach(function (o, i) {
       var b = el('button', 'opt');
       b.appendChild(el('span', 'key', String(i + 1)));
-      b.appendChild(el('span', 'txt', o.text));
+      // 答对后：英文单词叠在中文释义上方，直接在选项内对比，不另起卡片
+      if (s.answered && s.answered.ok && o.src) {
+        var txt2 = el('span', 'txt');
+        txt2.appendChild(el('span', 'opt-en', o.src));
+        txt2.appendChild(el('span', 'opt-zh', o.meaning));
+        b.appendChild(txt2);
+      } else {
+        b.appendChild(el('span', 'txt', o.text));
+      }
 
       if (s.answered) {
         if (o.ok) b.classList.add('right');
@@ -915,17 +924,12 @@ window.WL = window.WL || {};
     });
     card.appendChild(opts);
 
-    // 答对后展示其他选项各自对应的单词与释义，帮助对比记忆（练习模式同样生效）
+    // 答对后的展示时长内，点任意位置可提前进入下一题
     if (s.answered && s.answered.ok) {
-      var extras = q.options.filter(function (o) { return !o.ok && o.src; });
-      if (extras.length) {
-        var ex = el('div', 'qextra');
-        ex.appendChild(el('div', 'qextra-t', '其他选项对应的词'));
-        extras.forEach(function (o) {
-          ex.appendChild(h('<div class="qextra-row"><span class="w">' + o.src + '</span><span class="m">' + o.meaning + '</span></div>'));
-        });
-        card.appendChild(ex);
-      }
+      card.classList.add('answered-ok');
+      card.onclick = function () {
+        if (S.session === s && s.answered && s.answered.ok) advanceCorrect();
+      };
     }
 
     card.appendChild(qFoot());
