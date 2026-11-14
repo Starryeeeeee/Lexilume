@@ -36,6 +36,7 @@ window.WL = window.WL || {};
     return field === 'tr' ? firstSense(word.tr) : word.w;
   }
 
+  // 返回干扰项的词对象数组（保留来源，供答对后展示对比释义）
   function pickDistractors(target, pool, n, field) {
     var seen = {};
     seen[keyOf(target, field)] = 1;
@@ -48,7 +49,7 @@ window.WL = window.WL || {};
       if (!key || seen[key]) continue;
       seen[key] = 1;
       var bucket = (target.pos && w.pos === target.pos) ? same : other;
-      bucket.push(key);
+      bucket.push(w);
     }
     var out = shuffle(same).slice(0, n);
     if (out.length < n) {
@@ -69,24 +70,31 @@ window.WL = window.WL || {};
   }
 
   // 返回题目结构；若该词不适合该题型则返回 null
+  // 选项额外携带 src（来源单词）与 meaning（该词的中文释义），答对后用于对比展示
   function build(word, type, pool) {
-    var answer, options = [], prompt, sub = '', hint = '';
+    var answer, raw = [], prompt, sub = '', hint = '';
 
     if (type === 'en2cn') {
       answer = firstSense(word.tr);
       prompt = word.w;
       sub = word.ph || '';
-      options = [answer].concat(pickDistractors(word, pool, 3, 'tr'));
+      raw = [{ src: word, text: answer }].concat(pickDistractors(word, pool, 3, 'tr').map(function (w) {
+        return { src: w, text: firstSense(w.tr) };
+      }));
     } else if (type === 'cn2en') {
       answer = word.w;
       prompt = firstSense(word.tr);
       sub = word.pos ? '(' + word.pos + ')' : '';
-      options = [answer].concat(pickDistractors(word, pool, 3, 'w'));
+      raw = [{ src: word, text: answer }].concat(pickDistractors(word, pool, 3, 'w').map(function (w) {
+        return { src: w, text: w.w };
+      }));
     } else if (type === 'audio2cn') {
       answer = firstSense(word.tr);
       prompt = '听发音，选出释义';
       sub = '';
-      options = [answer].concat(pickDistractors(word, pool, 3, 'tr'));
+      raw = [{ src: word, text: answer }].concat(pickDistractors(word, pool, 3, 'tr').map(function (w) {
+        return { src: w, text: firstSense(w.tr) };
+      }));
     } else if (type === 'cloze') {
       if (!word.ex) return null;
       var blanked = blankOut(word.ex, word.w);
@@ -94,7 +102,9 @@ window.WL = window.WL || {};
       answer = word.w;
       prompt = blanked;
       sub = word.exCn || '';
-      options = [answer].concat(pickDistractors(word, pool, 3, 'w'));
+      raw = [{ src: word, text: answer }].concat(pickDistractors(word, pool, 3, 'w').map(function (w) {
+        return { src: w, text: w.w };
+      }));
     } else if (type === 'spell') {
       if (!spellable(word)) return null;
       answer = word.w;
@@ -108,8 +118,8 @@ window.WL = window.WL || {};
     // 拼写题没有选项，靠输入作答，跳过选项检查
     var opts = [];
     if (type !== 'spell') {
-      opts = shuffle(options).map(function (t) {
-        return { text: t, ok: t === answer };
+      opts = shuffle(raw).map(function (t) {
+        return { text: t.text, ok: t.text === answer, src: t.src.w, meaning: firstSense(t.src.tr) };
       });
       if (opts.length < 2) return null;
     }

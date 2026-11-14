@@ -140,5 +140,26 @@ ok('spellable 与 build("spell") 前提一致', gk.words.every(function (w) {
 const t2 = WL.quiz.chooseType(word, 'p', ['en2cn', 'cn2en']);
 ok('产出通道路由到看义选词', t2 === 'cn2en', t2);
 
+console.log('\n[10] 选项来源与对比释义');
+let srcBad = 0;
+gk.words.forEach(function (w) {
+  const q = WL.quiz.build(w, 'en2cn', gk.words);
+  if (!q) { srcBad++; return; }
+  const okOpt = q.options.find(function (o) { return o.ok; });
+  if (!okOpt || okOpt.src !== w.w || okOpt.meaning !== okOpt.text) srcBad++;
+  const wrongs = q.options.filter(function (o) { return !o.ok; });
+  if (wrongs.length < 3 || wrongs.some(function (o) { return !o.src || o.meaning !== o.text; })) srcBad++;
+});
+ok('看词选义选项都携带来源词与释义', srcBad === 0, srcBad + ' 个异常');
+
+let srcBad2 = 0;
+gk.words.forEach(function (w) {
+  const q = WL.quiz.build(w, 'cn2en', gk.words);
+  if (!q) { srcBad2++; return; }
+  const wrongs = q.options.filter(function (o) { return !o.ok; });
+  if (wrongs.some(function (o) { return !o.src || !o.meaning || o.src !== o.text; })) srcBad2++;
+});
+ok('看义选词选项都携带来源词与释义', srcBad2 === 0, srcBad2 + ' 个异常');
+
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败\n');
 process.exit(fail ? 1 : 0);

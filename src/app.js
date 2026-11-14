@@ -339,6 +339,9 @@ window.WL = window.WL || {};
     var q = WL.quiz.build(word, type, curBook().words) ||
       WL.quiz.build(word, 'en2cn', curBook().words);
     s.q = q;
+    // 拼写就地重拼的状态：每道拼写题首次作答计分，之后重拼不计
+    s.spellGraded = false;
+    s.spellMissed = false;
 
     if (type === 'audio2cn') WL.quiz.speak(word.w, cfg.sound);
     if (type === 'spell') WL.quiz.speak(word.w, cfg.sound);
@@ -373,8 +376,12 @@ window.WL = window.WL || {};
     var s = S.session;
     if (!s || s.answered || !s.q) return;
     var ok = WL.quiz.normalize(value) === WL.quiz.normalize(s.q.answer);
+    // 首次作答计分，之后的就地重拼不再计分
+    if (!s.spellGraded) {
+      s.spellGraded = true;
+      grade(ok);
+    }
     s.answered = { idx: -1, ok: ok };
-    grade(ok);
     render();
     if (ok) {
       setTimeout(function () {
@@ -382,9 +389,18 @@ window.WL = window.WL || {};
       }, 420);
     } else {
       setTimeout(function () {
-        if (S.session === s && s.answered && !s.answered.ok) enterRetry();
-      }, 720);
+        if (S.session === s && s.answered && !s.answered.ok) spellRetryInPlace();
+      }, 900);
     }
+  }
+
+  // 拼写答错：留在当前题，亮出正确拼写和读音按钮，清空输入框重新拼
+  function spellRetryInPlace() {
+    var s = S.session;
+    if (!s) return;
+    s.spellMissed = true;
+    s.answered = null;
+    render();
   }
 
   function grade(ok) {
@@ -838,10 +854,17 @@ window.WL = window.WL || {};
     }
 
     if (q.type === 'spell') {
-      // 拼写模式：只显示中文释义，单词音频在出题时自动播放
+      // 拼写模式：只显示中文释义，单词音频在出题时自动播放；读音按钮兼作提示
       var replay = el('button', 'btn ghost', '再听一次');
       replay.onclick = function () { WL.quiz.speak(word.w, true); };
       card.appendChild(replay);
+
+      // 拼错过：就地亮出正确拼写，听读音后重新拼，不跳下一词
+      if (s.spellMissed) {
+        card.appendChild(h('<div class="spell-correct">拼错了，正确拼写是 <b>' + q.answer + '</b></div>'));
+        card.appendChild(h('<div class="small muted" style="margin-top:6px">再听一遍读音，然后重新输入这个单词</div>'));
+      }
+
       var box = el('div', 'spellbox');
       var input = el('input');
       input.type = 'text';
@@ -891,6 +914,19 @@ window.WL = window.WL || {};
       opts.appendChild(b);
     });
     card.appendChild(opts);
+
+    // 答对后展示其他选项各自对应的单词与释义，帮助对比记忆（练习模式同样生效）
+    if (s.answered && s.answered.ok) {
+      var extras = q.options.filter(function (o) { return !o.ok && o.src; });
+      if (extras.length) {
+        var ex = el('div', 'qextra');
+        ex.appendChild(el('div', 'qextra-t', '其他选项对应的词'));
+        extras.forEach(function (o) {
+          ex.appendChild(h('<div class="qextra-row"><span class="w">' + o.src + '</span><span class="m">' + o.meaning + '</span></div>'));
+        });
+        card.appendChild(ex);
+      }
+    }
 
     card.appendChild(qFoot());
     return card;
