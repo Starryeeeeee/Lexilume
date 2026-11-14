@@ -639,6 +639,16 @@ h2.section {
 .learn-actions .btn-cut:hover { color: var(--wrong); }
 .learn-actions .btn-go { flex: 1; }
 
+/* ---------- 学习/拼写/练习页底部的退出动作：下移留白，弱化视觉 ---------- */
+.study-exit {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  margin-top: 44px;
+}
+.study-exit .btn { margin-top: 0; color: var(--ink-3); }
+.study-exit .btn:hover { color: var(--ink-2); }
+
 /* ---------- 词表页：自建词书的重命名/删除行 ---------- */
 .book-acts { display: flex; gap: 8px; padding: 0 6px 14px; }
 .book-acts .btn { padding: 7px 14px; font-size: 12px; }

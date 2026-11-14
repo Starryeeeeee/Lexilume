@@ -848,19 +848,37 @@ window.WL = window.WL || {};
     }
 
     if (s.phase === 'spell' && !s.retryCard) {
-      var skip = el('button', 'btn ghost block');
+      var exit = el('div', 'study-exit');
+      var skip = el('button', 'btn ghost');
       skip.textContent = '跳过剩余拼写，完成今日学习';
-      skip.style.marginTop = '4px';
       skip.onclick = finishSession;
-      wrap.appendChild(skip);
+      exit.appendChild(skip);
+      wrap.appendChild(exit);
     }
 
     if (s.phase === 'practice' && !s.retryCard) {
-      var quit = el('button', 'btn ghost block');
+      var exit2 = el('div', 'study-exit');
+      var cutBtn = el('button', 'btn ghost');
+      cutBtn.textContent = '斩';
+      cutBtn.title = '斩：这个词不再进入后续复习';
+      cutBtn.onclick = function () {
+        var cur = currentItem();
+        if (!cur) return;
+        var w = wordOf(cur.wid);
+        if (!w) return;
+        markCut(cur.wid, w);
+        // 本轮练习的剩余队列里也移除该词
+        s.items = s.items.filter(function (it, idx) { return idx <= s.i || it.wid !== cur.wid; });
+        s.total = s.items.length;
+        toast('已斩「' + w.w + '」，不再进入复习');
+        render();
+      };
+      exit2.appendChild(cutBtn);
+      var quit = el('button', 'btn ghost');
       quit.textContent = '结束练习';
-      quit.style.marginTop = '4px';
       quit.onclick = finishPractice;
-      wrap.appendChild(quit);
+      exit2.appendChild(quit);
+      wrap.appendChild(exit2);
     }
     return wrap;
   }
@@ -970,8 +988,8 @@ window.WL = window.WL || {};
     return card;
   }
 
-  // 斩：确认掌握的词打上标记，后续不再进入复习；本词也跳过测验
-  function cutAndNext(wid, word) {
+  // 斩：给词打上 cut 标记，后续不再进入复习与练习
+  function markCut(wid, word) {
     var s = S.session;
     if (!s) return;
     var prog = WL.store.getProgress(s.bookId);
@@ -985,6 +1003,13 @@ window.WL = window.WL || {};
     WL.store.putProgress(s.bookId, wid, st);
     WL.store.flush();
     if (WL.sync) WL.sync.markDirty();
+  }
+
+  // 斩：确认掌握的词打上标记，后续不再进入复习；本词也跳过测验
+  function cutAndNext(wid, word) {
+    var s = S.session;
+    if (!s) return;
+    markCut(wid, word);
     s.li++;
     if (s.li >= s.learn.length) enterSpellAsk();
     else enterLearnPhase();
