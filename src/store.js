@@ -8,7 +8,8 @@ window.WL = window.WL || {};
     log: 'wl.log.v1',
     streak: 'wl.streak.v1',
     books: 'wl.books.v1',          // 用户自建词书（内置词书在代码里，不存这里）
-    session: 'wl.session.v1'       // 未完成会话的快照（断点续学）
+    session: 'wl.session.v1',      // 未完成会话的快照（断点续学）
+    daily: 'wl.daily.v1'           // 已导入的时文词表文件名
   };
 
   var DEFAULT_CONFIG = {
@@ -205,6 +206,23 @@ window.WL = window.WL || {};
     try { localStorage.removeItem(K.session); } catch (e) { /* 忽略 */ }
   }
 
+  /* 时文词表导入记录：文件名维度的去重 */
+  function getDailyImported() {
+    return readJSON(K.daily, []);
+  }
+
+  function isDailyImported(name) {
+    return getDailyImported().indexOf(name) >= 0;
+  }
+
+  function markDailyImported(name) {
+    var list = getDailyImported();
+    if (list.indexOf(name) < 0) {
+      list.push(name);
+      writeJSON(K.daily, list);
+    }
+  }
+
   function usage() {
     var total = 0;
     try {
@@ -258,6 +276,9 @@ window.WL = window.WL || {};
     saveSession: saveSession,
     getSession: getSession,
     removeSession: removeSession,
+    getDailyImported: getDailyImported,
+    isDailyImported: isDailyImported,
+    markDailyImported: markDailyImported,
     usage: usage,
     available: available,
     origin: origin

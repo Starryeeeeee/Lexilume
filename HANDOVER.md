@@ -26,6 +26,7 @@
 | 本地存储 | localStorage（`wl.*` 键）；自建词书持久化（`wl.books.v1`），支持重命名与删除 |
 | 跨设备同步 | **已上线实测在用**（progress.json 持续有 sync 提交）；无变化跳过提交；有待上传状态与体积预警 |
 | 登录门 | fine-grained 令牌即登录（verified 校验），失效自动回锁屏，离线不锁；设置页可退出登录 |
+| 每日时文词 | Agnes 生成 data/daily/*.json（契约见 AGNES.md），词表页检查并一键导入为自建词书；导入记录 wl.daily.v1 去重 |
 | UI | 新拟态，主色 #2F6ED4 蓝；完成页 Fluent Emoji 3D 插画（assets/emoji，微软 MIT 协议） |
 
 **网络实测（家里电脑）**：`api.github.com` ✅ 通、`<用户名>.github.io` ✅ 通、`github.com` 网页 ❌ 不通、`raw.githubusercontent.com` ❌ 不通。同步与访问恰好都不依赖被墙的两项。学校电脑待实测。
@@ -117,6 +118,7 @@ tools/selftest.js     48 项核心自检：node tools/selftest.js
 tools/build-books.js  大词书重新生成（需先下载源数据，见文件头说明）
 tools/make-icons.js   重新生成图标（纯 Node 手写 PNG 编码）
 改进方向.md           滚动待办清单（做完即删，勿当存档）
+AGNES.md              给 Agnes 的每日扩词设定（数据契约与安全约束）
 HANDOVER.md           本文档
 ```
 

@@ -1304,6 +1304,95 @@ window.WL = window.WL || {};
     return wrap;
   }
 
+  /* ============ 每日时文词（Agnes 生成，仓库 data/daily/） ============ */
+
+  function ghApi(path) {
+    var c = WL.sync.get();
+    return fetch('https://api.github.com' + path, {
+      headers: {
+        'Authorization': 'Bearer ' + c.token,
+        'Accept': 'application/vnd.github+json'
+      }
+    }).then(function (res) {
+      if (res.status === 404) return { status: 404, json: null };
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json().then(function (j) { return { status: res.status, json: j }; });
+    });
+  }
+
+  function b64ToText(b64) {
+    var bin = atob(String(b64).replace(/\s/g, ''));
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  function fetchDailyList() {
+    var c = WL.sync.get();
+    return ghApi('/repos/' + c.owner + '/' + c.repo + '/contents/data/daily?ref=' + (c.branch || 'main'))
+      .then(function (r) {
+        if (r.status === 404) return [];
+        return (r.json || []).filter(function (f) { return f.type === 'file' && /\.json$/.test(f.name); })
+          .map(function (f) { return { name: f.name, size: f.size }; });
+      });
+  }
+
+  // 解析时文 JSON：字段容错、批内去重；结构非法返回 null
+  function parseDaily(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray(data.words)) return null;
+    var seen = {};
+    var words = [];
+    (data.words || []).forEach(function (e) {
+      if (!e || !e.word) return;
+      var w = String(e.word).trim().toLowerCase();
+      if (!w || seen[w]) return;
+      seen[w] = 1;
+      words.push({
+        w: w,
+        ph: e.phonetic || '',
+        pos: e.pos || '',
+        tr: e.meaning || '',
+        ex: e.example || '',
+        exCn: e.exampleCn || ''
+      });
+    });
+    if (!words.length) return null;
+    var date = (data.date || '').trim() || String(data.url || '').slice(-30);
+    return {
+      book: {
+        id: 'daily-' + (date || Date.now().toString(36)),
+        name: '时文 · ' + date,
+        note: (data.source || '时文词表') + ' · ' + words.length + ' 词',
+        words: words,
+        notes: data.notes || []
+      }
+    };
+  }
+
+  function importDailyFile(file) {
+    var c = WL.sync.get();
+    return ghApi('/repos/' + c.owner + '/' + c.repo + '/contents/data/daily/' + encodeURIComponent(file.name) + '?ref=' + (c.branch || 'main'))
+      .then(function (r) {
+        if (r.status === 404 || !r.json || !r.json.content) return { ok: false, msg: '文件不存在或为空' };
+        var data;
+        try {
+          data = JSON.parse(b64ToText(r.json.content));
+        } catch (e) {
+          return { ok: false, msg: '文件不是合法 JSON' };
+        }
+        var parsed = parseDaily(data);
+        if (!parsed) return { ok: false, msg: '词表为空或格式不符合契约（见 AGNES.md）' };
+        parsed.book.words.forEach(function (w, i) { w.id = parsed.book.id + '-' + i; });
+        WL.books.push(parsed.book);
+        WL.store.upsertUserBook(parsed.book);
+        bookCache[parsed.book.id] = null;
+        WL.store.markDailyImported(file.name);
+        WL.store.setConfig({ book: parsed.book.id });
+        S.bookId = parsed.book.id;
+        return { ok: true, name: parsed.book.name };
+      });
+  }
+
   /* ============ 词表 ============ */
 
   function viewBooks() {
@@ -1449,6 +1538,64 @@ window.WL = window.WL || {};
     row.appendChild(tmpl);
     imp.appendChild(row);
     wrap.appendChild(imp);
+
+    var daily = el('div', 'card');
+    daily.appendChild(el('h2', 'section', '每日时文词'));
+    daily.appendChild(h('<div class="small muted" style="margin-bottom:12px">Agnes 每天从 China Daily 选词生成词表，放在仓库 <code>data/daily/</code> 里。点下面检查并一键导入为独立词书。</div>'));
+    var drow = el('div', 'row');
+    var checkBtn = el('button', 'btn primary', '检查远端时文词表');
+    drow.appendChild(checkBtn);
+    daily.appendChild(drow);
+    var dList = el('div');
+    daily.appendChild(dList);
+    checkBtn.onclick = function () {
+      checkBtn.disabled = true;
+      checkBtn.textContent = '检查中…';
+      fetchDailyList().then(function (files) {
+        checkBtn.disabled = false;
+        checkBtn.textContent = '检查远端时文词表';
+        dList.innerHTML = '';
+        if (!files.length) {
+          dList.appendChild(h('<div class="small muted">data/daily/ 里还没有文件。等 Agnes 生成后再来检查。</div>'));
+          return;
+        }
+        files.forEach(function (f) {
+          var row = el('div', 'wrongitem');
+          row.appendChild(el('span', 'w', f.name.replace('.json', '')));
+          var imported = WL.store.isDailyImported(f.name);
+          row.appendChild(el('span', 't', imported ? '已导入' : Math.round(f.size / 1024) + ' KB'));
+          if (!imported) {
+            var ib = el('button', 'btn', '导入');
+            ib.style.cssText = 'padding:6px 14px;margin-left:auto;flex:none';
+            ib.onclick = function () {
+              ib.disabled = true;
+              ib.textContent = '导入中…';
+              importDailyFile(f).then(function (r) {
+                if (r.ok) {
+                  toast('已导入「' + r.name + '」');
+                  render();
+                } else {
+                  ib.disabled = false;
+                  ib.textContent = '导入';
+                  toast('导入失败：' + r.msg);
+                }
+              }).catch(function (e) {
+                ib.disabled = false;
+                ib.textContent = '导入';
+                toast('导入失败：' + (e.message || '网络错误'));
+              });
+            };
+            row.appendChild(ib);
+          }
+          dList.appendChild(row);
+        });
+      }).catch(function (e) {
+        checkBtn.disabled = false;
+        checkBtn.textContent = '检查远端时文词表';
+        toast('检查失败：' + (e.message || '网络错误'));
+      });
+    };
+    wrap.appendChild(daily);
 
     var bk = el('div', 'card');
     bk.appendChild(el('h2', 'section', '数据'));
