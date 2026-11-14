@@ -268,9 +268,9 @@ window.WL = window.WL || {};
     if (cur.from === 'spell') {
       type = 'spell';
     } else if (cur.from === 'new') {
-      // 新词的即时巩固题在已启用题型里随机，保持新鲜感
-      var at = cfg.activeTypes && cfg.activeTypes.length ? cfg.activeTypes : ['en2cn'];
-      type = at[Math.floor(Math.random() * at.length)];
+      // 刚看完词卡，立刻测「看词选义」：认出刚见过的这个词；
+      // 「看义选词」这类回忆词形的题留给复习阶段的产出通道
+      type = 'en2cn';
     } else if (cur.from === 'review' && st) {
       var chs = activeChannels();
       channel = WL.srs.weakestChannel(st, now, chs);
