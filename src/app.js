@@ -16,6 +16,9 @@ window.WL = window.WL || {};
   // 练习模式一轮的题数
   var PRACTICE_SIZE = 10;
 
+  // 拼写环节：纠正后重排确认的最大轮次（防止个别词无限循环；跳过按钮随时可退出）
+  var SPELL_REQUEUE_MAX = 3;
+
   function getBook(id) {
     if (bookCache[id]) return bookCache[id];
     var books = WL.books || [];
@@ -399,7 +402,7 @@ window.WL = window.WL || {};
     var s = S.session;
     if (!s || s.answered || !s.q) return;
     var ok = WL.quiz.normalize(value) === WL.quiz.normalize(s.q.answer);
-    // 首次作答计分，之后的就地重拼不再计分
+    // 每次出现的首次提交计分；看正确答案后的纠正重拼不计分
     if (!s.spellGraded) {
       s.spellGraded = true;
       grade(ok);
@@ -408,7 +411,21 @@ window.WL = window.WL || {};
     render();
     if (ok) {
       setTimeout(function () {
-        if (S.session === s && s.answered && s.answered.ok) advanceCorrect();
+        if (S.session !== s || !s.answered || !s.answered.ok) return;
+        // 这一次出现是「拼错后纠正过来的」：把词排到队列最后，稍后再拼一次确认记忆；
+        // 再拼对就过，再拼错就重复这个循环（最多重排 SPELL_REQUEUE_MAX 轮）
+        if (s.spellMissed) {
+          var cur2 = currentItem();
+          var requeues = (cur2 && cur2.retry) || 0;
+          s.answered = null;
+          if (cur2 && requeues < SPELL_REQUEUE_MAX) {
+            s.items.push({ wid: cur2.wid, from: 'spell', retry: requeues + 1 });
+            s.total = s.items.length;
+          }
+          advanceCorrect();
+          return;
+        }
+        advanceCorrect();
       }, 420);
     } else {
       setTimeout(function () {
