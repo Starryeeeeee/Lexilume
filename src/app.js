@@ -715,6 +715,16 @@ window.WL = window.WL || {};
     var today = WL.store.getToday();
     var streak = WL.store.streakDays();
 
+    // 今日正确率放首页最上面（当天答过题才显示）
+    if (today.ok + today.bad > 0) {
+      var rateCard = el('div', 'card');
+      rateCard.appendChild(el('h2', 'section', '今日正确率'));
+      var rate = Math.round(today.ok / (today.ok + today.bad) * 100);
+      rateCard.appendChild(h('<div style="font-size:26px;font-variant-numeric:tabular-nums">' + rate + '%</div>'));
+      rateCard.appendChild(h('<div class="small muted">答对 ' + today.ok + ' · 答错 ' + today.bad + '</div>'));
+      wrap.appendChild(rateCard);
+    }
+
     var ov = el('div', 'overview');
     [['待复习', dueN], ['今日新学', today.nw], ['今日复习', today.rv], ['连续天数', streak]].forEach(function (x) {
       var cell = el('div', 'ov-cell');
@@ -787,15 +797,6 @@ window.WL = window.WL || {};
     pgo.onclick = function () { startPractice(practiceSel.mode, practiceSel.scope); };
     pc.appendChild(pgo);
     wrap.appendChild(pc);
-
-    if (today.ok + today.bad > 0) {
-      var c = el('div', 'card');
-      c.appendChild(el('h2', 'section', '今日正确率'));
-      var rate = Math.round(today.ok / (today.ok + today.bad) * 100);
-      c.appendChild(h('<div style="font-size:26px;font-variant-numeric:tabular-nums">' + rate + '%</div>'));
-      c.appendChild(h('<div class="small muted">答对 ' + today.ok + ' · 答错 ' + today.bad + '</div>'));
-      wrap.appendChild(c);
-    }
 
     return wrap;
   }
