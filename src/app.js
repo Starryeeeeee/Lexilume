@@ -220,9 +220,9 @@ window.WL = window.WL || {};
     if (ok) {
       s.right++;
       WL.store.bumpLog('ok');
-      if (cur.retry === 0) {
-        if (cur.from === 'new' && !s.newDone[cur.wid]) { s.newDone[cur.wid] = 1; WL.store.bumpLog('nw'); }
-        if (cur.from === 'review' && !s.revDone[cur.wid]) { s.revDone[cur.wid] = 1; WL.store.bumpLog('rv'); }
+      if (cur.from === 'review' && !s.revDone[cur.wid]) {
+        s.revDone[cur.wid] = 1;
+        WL.store.bumpLog('rv');
       }
     } else {
       s.wrong++;
@@ -453,6 +453,10 @@ window.WL = window.WL || {};
         st.seen = 0;
         WL.store.putProgress(s.bookId, cur.wid, st);
         WL.store.flush();
+        if (!s.newDone[cur.wid]) {
+          s.newDone[cur.wid] = 1;
+          WL.store.bumpLog('nw');
+        }
       }
       cur.stage = 'test';
       prepare();
