@@ -1439,6 +1439,127 @@ window.WL = window.WL || {};
     return { bookN: bookN, wordN: wordN, dayN: dayN };
   }
 
+  // 汇总最近 N 天的日志（含今天）
+  function logWindow(days) {
+    var log = WL.store.getLog();
+    var out = { nw: 0, rv: 0, ok: 0, bad: 0, pr: 0, ms: 0 };
+    var d = new Date();
+    for (var i = 0; i < days; i++) {
+      var k = WL.store.todayKey(d);
+      var rec = log[k];
+      if (rec) {
+        out.nw += rec.nw || 0;
+        out.rv += rec.rv || 0;
+        out.ok += rec.ok || 0;
+        out.bad += rec.bad || 0;
+        out.pr += rec.pr || 0;
+        out.ms += rec.ms || 0;
+      }
+      d.setDate(d.getDate() - 1);
+    }
+    return out;
+  }
+
+  function accPct(ok, bad) {
+    var t = ok + bad;
+    return t ? Math.round(ok / t * 100) + '%' : '—';
+  }
+
+  // 导出 Markdown 学习报告：按当前词书生成，时间段统计为全部词书合计
+  function exportReport() {
+    var book = curBook();
+    if (!book) { toast('先选择词表'); return; }
+    var prog = WL.store.getProgress(book.id);
+    var now = Date.now();
+    var chs = activeChannels();
+    var total = book.words.length;
+    var learned = 0, cutN = 0;
+    var buckets = { learning: 0, familiar: 0, mastered: 0, risk: 0 };
+    var riskList = [], lapseList = [];
+    book.words.forEach(function (w) {
+      var st = prog[w.id];
+      if (!st) return;
+      if (st.cut) { cutN++; return; }
+      learned++;
+      var hl = WL.srs.healthOf(st, now, chs);
+      if (hl === 'risk') buckets.risk++;
+      else if (hl === 'learning') buckets.learning++;
+      else if (hl === 'familiar') buckets.familiar++;
+      else buckets.mastered++;
+      var minR = 1;
+      chs.forEach(function (ch) {
+        var c = st.ch[ch];
+        if (!c || c.n === 0) return;
+        var r = WL.srs.retrievability(c.s, c.last, now);
+        if (r < minR) minR = r;
+      });
+      if (minR < 0.75) riskList.push({ w: w.w, tr: w.tr, r: minR });
+      if (st.lapses >= 3) lapseList.push({ w: w.w, tr: w.tr, n: st.lapses });
+    });
+    riskList.sort(function (a, b) { return a.r - b.r; });
+    lapseList.sort(function (a, b) { return b.n - a.n; });
+
+    var t1 = logWindow(1), w7 = logWindow(7), w30 = logWindow(30);
+    var fc = WL.srs.forecast(prog, now, 30, chs, WL.srs.simulateNewLearn(
+      book.words.filter(function (w) { return !prog[w.id]; }),
+      now, 30, WL.store.getConfig().newLimit));
+    var sum = fc.reduce(function (a, b) { return a + b; }, 0);
+    var week = fc.slice(0, 7).reduce(function (a, b) { return a + b; }, 0);
+    var un = total - learned - cutN;
+
+    var L = [];
+    L.push('# Lexilume 学习报告');
+    L.push('');
+    L.push('- 词书：' + book.name + '（' + total + ' 词）');
+    L.push('- 生成时间：' + new Date().toLocaleString('zh-CN', { hour12: false }));
+    L.push('- 连续学习天数：' + WL.store.streakDays() + ' 天；累计有记录天数：' + Object.keys(WL.store.getLog()).length + ' 天');
+    L.push('');
+    L.push('## 词汇状态');
+    L.push('- 已学 ' + learned + '（学习中 ' + buckets.learning + ' · 熟悉 ' + buckets.familiar +
+      ' · 已掌握 ' + buckets.mastered + ' · 遗忘风险 ' + buckets.risk + '）');
+    L.push('- 已斩 ' + cutN + '；未学 ' + un);
+    L.push('');
+    L.push('## 时间段统计（全部词书合计，含练习）');
+    L.push('');
+    L.push('| 指标 | 今日 | 近 7 天 | 近 30 天 |');
+    L.push('|---|---|---|---|');
+    L.push('| 新学 | ' + t1.nw + ' | ' + w7.nw + ' | ' + w30.nw + ' |');
+    L.push('| 复习 | ' + t1.rv + ' | ' + w7.rv + ' | ' + w30.rv + ' |');
+    L.push('| 正确率 | ' + accPct(t1.ok, t1.bad) + ' | ' + accPct(w7.ok, w7.bad) + ' | ' + accPct(w30.ok, w30.bad) + ' |');
+    L.push('| 练习题数 | ' + t1.pr + ' | ' + w7.pr + ' | ' + w30.pr + ' |');
+    L.push('| 学习时长 | ' + Math.round(t1.ms / 60000) + ' 分 | ' + Math.round(w7.ms / 60000) + ' 分 | ' + Math.round(w30.ms / 60000) + ' 分 |');
+    L.push('');
+    L.push('## 未来 30 天复习量（含继续新学的模拟）');
+    L.push('- 明天：' + (fc[1] || 0) + ' 张；7 天内：' + week + ' 张；30 天合计：' + sum + ' 张（日均 ' + Math.round(sum / 30) + ' 张）');
+    L.push('');
+    L.push('## 遗忘风险 TOP' + Math.min(10, riskList.length));
+    if (riskList.length) {
+      riskList.slice(0, 10).forEach(function (x) {
+        L.push('- ' + x.w + ' — ' + x.tr + '（保留率 ' + Math.round(x.r * 100) + '%）');
+      });
+    } else {
+      L.push('- 无');
+    }
+    L.push('');
+    L.push('## 错词本 TOP' + Math.min(10, lapseList.length));
+    if (lapseList.length) {
+      lapseList.slice(0, 10).forEach(function (x) {
+        L.push('- ' + x.w + ' — ' + x.tr + '（错 ' + x.n + ' 次）');
+      });
+    } else {
+      L.push('- 无');
+    }
+    L.push('');
+
+    var blob = new Blob([L.join('\n')], { type: 'text/markdown;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Lexilume学习报告-' + book.name + '-' + WL.store.todayKey() + '.md';
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    toast('报告已导出');
+  }
+
   function exportBackup() {
     var data = WL.store.exportAll();
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1457,6 +1578,13 @@ window.WL = window.WL || {};
     var book = curBook();
     var wrap = el('div', 'stack');
     if (!book) return wrap;
+
+    var top = el('div', 'spread');
+    top.appendChild(el('h2', 'section', '统计'));
+    var rep = el('button', 'btn', '导出学习报告');
+    rep.onclick = exportReport;
+    top.appendChild(rep);
+    wrap.appendChild(top);
 
     var prog = WL.store.getProgress(book.id);
     var now = Date.now();
