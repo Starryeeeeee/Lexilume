@@ -1,4 +1,4 @@
-var CACHE = 'lexilume-v11';
+var CACHE = 'lexilume-v12';
 var ASSETS = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ var ASSETS = [
   './src/sync.js',
   './src/app.js',
   './data/books.js',
+  './data/books-generated.js',
   './manifest.webmanifest'
 ];
 

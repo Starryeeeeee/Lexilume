@@ -104,8 +104,9 @@ src/app.js            视图与会话状态机（阶段机：startSession → en
                       enterLearnPhase → advanceFromCard → enterSpellAsk → startSpell /
                       finishSession；练习模式 startPractice / finishPractice；
                       队列走完由 queueDrained 决定去哪）
-data/books.js         词库，装载时自动归一化释义里混入的第二词性
-sw.js                 离线缓存，改资源后记得 bump CACHE 版本号（当前 v3）
+data/books.js         词库（手工维护：高考核心高频/选必二/我的积累）
+data/books-generated.js  生成词书（高中3500 3668 词、四级 3739 词、六级增量 2078 词；数据源 kajweb/dict 公开镜像，含音标例句；由 tools/build-books.js 生成，勿手工编辑）
+sw.js                 离线缓存，改资源后记得 bump CACHE 版本号（当前 v12）
 tools/selftest.js     25 项核心自检：node tools/selftest.js
 tools/make-icons.js   重新生成图标（纯 Node 手写 PNG 编码）
 HANDOVER.md           本文档
@@ -135,6 +136,7 @@ node tools/selftest.js          # 25 项，全过才算动过核心
 ## 八、下一步候选
 
 - 启用其余出题题型（听音辨义 / 拼写 / 语境填词），接口在 quiz.js，设置里把灰显行改成开关即可
-- 词库扩充：现只 1 本 152 词的示例词库。可选 ECDICT（github.com/skywind3000/ECDICT）按教材 tag 裁剪，或用户导入自己的教材词表；注意 3500 词学满后 progress.json 约 600KB，接近 Contents API 1MB 上限，到时可按词表拆文件
+- 词库：已内置 6 本共 9692 词（三本大书由 tools/build-books.js 从 kajweb/dict 生成）。牛津高阶整本不建议收录（版权 + 5 万词条加载/出题负担），若要"生词查询"能力，后续可接 ECDICT 数据做查询面板
+- **同步体积预警**：三本大书若学满（合计约 9500 词），progress.json 会接近/超过 Contents API 1MB 上限，届时需把进度按词书拆成多个文件（progress.<bookId>.json），并同步调整 sync.js 与 Agnes 的读写约定
 - 同步冲突的边界：两台机器同一秒答题理论上仍会以后写者为准，可忽略
 - PWA 已就绪（manifest + sw），部署后手机「添加到主屏幕」即可离线
