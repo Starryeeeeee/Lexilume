@@ -168,5 +168,17 @@ gk.words.forEach(function (w) {
 });
 ok('看义选词选项都携带来源词与释义', srcBad2 === 0, srcBad2 + ' 个异常');
 
+console.log('\n[11] 已斩词不进入复习预测');
+const stCut = WL.srs.newState(word, 0);
+WL.srs.review(stCut, 'r', true, 0);
+stCut.cut = 1;
+const statesCut = {};
+statesCut[word.id] = stCut;
+const fcCut = WL.srs.forecast(statesCut, 0, 30, ['r']);
+ok('已斩词不计入复习预测', fcCut.reduce(function (a, b) { return a + b; }, 0) === 0, JSON.stringify(fcCut));
+delete stCut.cut;
+const fcBack = WL.srs.forecast(statesCut, 0, 30, ['r']);
+ok('恢复后重新计入预测', fcBack.reduce(function (a, b) { return a + b; }, 0) === 1, JSON.stringify(fcBack));
+
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败\n');
 process.exit(fail ? 1 : 0);

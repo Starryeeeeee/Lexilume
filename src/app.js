@@ -86,7 +86,7 @@ window.WL = window.WL || {};
     var due = [];
     book.words.forEach(function (w) {
       var st = prog[w.id];
-      if (st && WL.srs.dueNow(st, now, chs)) due.push({ w: w, st: st });
+      if (st && !st.cut && WL.srs.dueNow(st, now, chs)) due.push({ w: w, st: st });
     });
     due.sort(function (a, b) {
       return WL.srs.overdueDays(b.st, now, chs) - WL.srs.overdueDays(a.st, now, chs);
@@ -829,7 +829,6 @@ window.WL = window.WL || {};
     var wrap = el('div', 'stack');
     var top = el('div', 'study-top');
     top.appendChild(el('div', null, '新学 · 第 ' + (s.li + 1) + ' / ' + total + ' 词'));
-    top.appendChild(el('div', null, '看完立刻测这个词'));
     wrap.appendChild(top);
 
     var bar = el('div', 'bar');
@@ -842,7 +841,7 @@ window.WL = window.WL || {};
     wrap.appendChild(learnCard(word, '继续', function () {
       // li 仍指向当前这张卡；advanceFromCard 学完这个词，测完由 queueDrained 里 li++
       advanceFromCard();
-    }));
+    }, true));
     return wrap;
   }
 
@@ -873,20 +872,20 @@ window.WL = window.WL || {};
     return wrap;
   }
 
-  function learnCard(word, btnText, onClick) {
+  function learnCard(word, btnText, onClick, withCut) {
     var cfg = WL.store.getConfig();
     var s = S.session;
     var card = el('div', 'qcard learn-body');
     card.appendChild(el('div', 'learn-word', word.w));
 
     var phRow = el('div', 'learn-ph');
-    if (word.ph) phRow.appendChild(el('span', null, word.ph));
     if (cfg.sound) {
       var sp = el('button', 'speak');
       sp.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
       sp.onclick = function (e) { e.stopPropagation(); WL.quiz.speak(word.w, true); };
       phRow.appendChild(sp);
     }
+    if (word.ph) phRow.appendChild(el('span', null, word.ph));
     card.appendChild(phRow);
 
     var def = el('div', 'learn-def');
@@ -897,16 +896,43 @@ window.WL = window.WL || {};
     }
     card.appendChild(def);
 
-    var btn = el('button', 'btn primary block lg', btnText || '下一个');
-    btn.style.marginTop = '26px';
-    btn.onclick = onClick;
-    card.appendChild(btn);
+    var actions = el('div', 'learn-actions');
+    if (withCut) {
+      var cut = el('button', 'btn lg btn-cut', '斩');
+      cut.title = '斩：这个词不再进入后续复习';
+      cut.onclick = function () { cutAndNext(word.id, word); };
+      actions.appendChild(cut);
+    }
+    var go = el('button', 'btn primary lg btn-go', btnText || '继续');
+    go.onclick = onClick;
+    actions.appendChild(go);
+    card.appendChild(actions);
 
     if (cfg.sound && s && s.spokenFor !== word.id) {
       s.spokenFor = word.id;
       WL.quiz.speak(word.w, true);
     }
     return card;
+  }
+
+  // 斩：确认掌握的词打上标记，后续不再进入复习；本词也跳过测验
+  function cutAndNext(wid, word) {
+    var s = S.session;
+    if (!s) return;
+    var prog = WL.store.getProgress(s.bookId);
+    var st = prog[wid];
+    if (!st) {
+      st = WL.srs.newState(word, Date.now());
+      st.seen = 1;
+      prog[wid] = st;
+    }
+    st.cut = Date.now();
+    WL.store.putProgress(s.bookId, wid, st);
+    WL.store.flush();
+    if (WL.sync) WL.sync.markDirty();
+    s.li++;
+    if (s.li >= s.learn.length) enterSpellAsk();
+    else enterLearnPhase();
   }
 
   function questionCard(word) {
@@ -1259,14 +1285,16 @@ window.WL = window.WL || {};
     var now = Date.now();
     var chs = activeChannels();
     var total = book.words.length;
-    var learned = 0, newN = 0;
+    var learned = 0, newN = 0, cutN = 0;
     var buckets = { learning: 0, familiar: 0, mastered: 0, risk: 0 };
     var riskList = [];
     var lapseList = [];
+    var cutList = [];
 
     book.words.forEach(function (w) {
       var st = prog[w.id];
       if (!st) { newN++; return; }
+      if (st.cut) { cutN++; cutList.push({ w: w, at: st.cut }); return; }
       learned++;
       var hl = WL.srs.healthOf(st, now, chs);
       if (hl === 'risk') { buckets.risk++; }
@@ -1295,7 +1323,8 @@ window.WL = window.WL || {};
       ['学习中', buckets.learning, '#8FB3A4'],
       ['熟悉', buckets.familiar, '#5C8A76'],
       ['已掌握', buckets.mastered, '#2E5C4E'],
-      ['遗忘风险', buckets.risk, '#A4473C']
+      ['遗忘风险', buckets.risk, '#A4473C'],
+      ['已斩', cutN, '#AEB4BF']
     ];
     var barWrap = el('div');
     barWrap.style.cssText = 'display:flex;height:12px;border-radius:3px;overflow:hidden;background:#EDEAE2';
@@ -1376,7 +1405,47 @@ window.WL = window.WL || {};
     }
     wrap.appendChild(c5);
 
+    var c6 = el('div', 'card');
+    c6.appendChild(el('h2', 'section', '已斩'));
+    if (!cutList.length) {
+      c6.appendChild(h('<div class="small muted">暂无已斩的词。学习新词时点「斩」，确定掌握的词就会移出复习计划。</div>'));
+    } else {
+      var cl = el('div', 'wronglist');
+      cutList.slice(0, 30).forEach(function (x) {
+        var row = el('div', 'wrongitem');
+        row.appendChild(el('span', 'w', x.w.w));
+        row.appendChild(el('span', 't', x.w.tr));
+        var btn = el('button', 'btn', '恢复');
+        btn.style.cssText = 'padding:6px 14px;margin-left:auto;flex:none';
+        btn.onclick = function () { restoreCut(book.id, x.w.id, x.w.w); };
+        row.appendChild(btn);
+        cl.appendChild(row);
+      });
+      c6.appendChild(cl);
+      if (cutList.length > 30) {
+        c6.appendChild(h('<div class="small muted" style="margin-top:8px">共 ' + cutList.length + ' 个，仅显示前 30 个</div>'));
+      }
+    }
+    wrap.appendChild(c6);
+
     return wrap;
+  }
+
+  // 恢复已斩的词：学过历史的继续原调度；从未学过的删掉状态回到新词池
+  function restoreCut(bookId, wid, wordText) {
+    var prog = WL.store.getProgress(bookId);
+    var st = prog[wid];
+    if (!st) return;
+    var attempts = (st.ch && st.ch.r ? st.ch.r.n : 0) + (st.ch && st.ch.p ? st.ch.p.n : 0);
+    if (!attempts) {
+      delete prog[wid];
+    } else {
+      delete st.cut;
+    }
+    WL.store.flush();
+    if (WL.sync) WL.sync.markDirty();
+    toast('已恢复「' + wordText + '」');
+    render();
   }
 
   function heatmap() {
@@ -1543,10 +1612,9 @@ window.WL = window.WL || {};
     });
     var rows = [
       ['状态', avail ? '可用' : '不可用（记录不会保存）', avail ? 'var(--accent-deep)' : 'var(--wrong)'],
-      ['打开方式', WL.store.origin(), 'var(--ink-2)'],
       ['已学词条', progAll + ' 条，分布在 ' + bookN + ' 份词表', 'var(--ink-2)'],
       ['有记录的天数', Object.keys(WL.store.getLog()).length + ' 天', 'var(--ink-2)'],
-      ['占用空间', (WL.store.usage() / 1024).toFixed(1) + ' KB', 'var(--ink-2)']
+      ['本机占用（浏览器存储）', (WL.store.usage() / 1024).toFixed(1) + ' KB', 'var(--ink-2)']
     ];
     rows.forEach(function (r) {
       var row = el('div', 'spread');

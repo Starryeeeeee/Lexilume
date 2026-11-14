@@ -3,9 +3,9 @@
   --bg-soft: #E6EAF0;
   --sh-dark: #B8BCC2;
   --sh-light: #FFFFFF;
-  --ink: #33363B;
-  --ink-2: #5E6470;
-  --ink-3: #8B92A0;
+  --ink: #2B2E33;
+  --ink-2: #49505C;
+  --ink-3: #6E7686;
   --accent: #2F6ED4;
   --accent-deep: #1F55A8;
   --right: #3E8E6E;
@@ -27,7 +27,7 @@ html, body {
   padding: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+  font-family: "Segoe UI", "Source Han Sans SC", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -576,6 +576,17 @@ h2.section {
 .spell-reveal { overflow: hidden; animation: spellSlide 0.26s ease both; }
 .spell-correct { margin-top: 16px; font-size: 14px; color: #94403A; }
 .spell-correct b { font-size: 22px; letter-spacing: 0.04em; margin-left: 6px; }
+
+/* ---------- 学习词卡的动作行：斩 + 继续 ---------- */
+.learn-actions { display: flex; gap: 12px; margin-top: 26px; }
+.learn-actions .btn { margin-top: 0; }
+.learn-actions .btn-cut {
+  flex: none;
+  width: 86px;
+  color: var(--ink-2);
+}
+.learn-actions .btn-cut:hover { color: var(--wrong); }
+.learn-actions .btn-go { flex: 1; }
 
 /* ---------- 登录门 ---------- */
 .lock { max-width: 420px; margin: 96px auto 0; }

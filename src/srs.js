@@ -132,23 +132,24 @@ window.WL = window.WL || {};
     return (now - max) / DAY;
   }
 
-  // 复习量预测：未来 n 天每天到期的卡片数
-  function forecast(states, now, days, channels) {
-    channels = channels || ['r', 'p'];
-    var out = [];
-    for (var i = 0; i < days; i++) out.push(0);
-    for (var k in states) {
-      var st = states[k];
-      for (var j = 0; j < channels.length; j++) {
-        var c = st.ch[channels[j]];
-        if (!c || c.n === 0 || !c.due) continue;
-        var idx = Math.floor((c.due - now) / DAY);
-        if (idx < 0) idx = 0;
-        if (idx < days) out[idx]++;
-      }
+// 复习量预测：未来 n 天每天到期的卡片数（已斩的词不计入）
+function forecast(states, now, days, channels) {
+  channels = channels || ['r', 'p'];
+  var out = [];
+  for (var i = 0; i < days; i++) out.push(0);
+  for (var k in states) {
+    var st = states[k];
+    if (st.cut) continue;
+    for (var j = 0; j < channels.length; j++) {
+      var c = st.ch[channels[j]];
+      if (!c || c.n === 0 || !c.due) continue;
+      var idx = Math.floor((c.due - now) / DAY);
+      if (idx < 0) idx = 0;
+      if (idx < days) out[idx]++;
     }
-    return out;
   }
+  return out;
+}
 
   WL.srs = {
     DAY: DAY,
