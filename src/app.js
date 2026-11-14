@@ -709,7 +709,10 @@ window.WL = window.WL || {};
     var learned = 0, dueN = 0;
     book.words.forEach(function (w) {
       var st = prog[w.id];
-      if (st) { learned++; if (WL.srs.dueNow(st, now, chs)) dueN++; }
+      if (st) {
+        learned++;
+        if (!st.cut && WL.srs.dueNow(st, now, chs)) dueN++;
+      }
     });
 
     var today = WL.store.getToday();
@@ -1080,6 +1083,12 @@ window.WL = window.WL || {};
       var replay = el('button', 'btn ghost', '再听一次');
       replay.onclick = function () { WL.quiz.speak(word.w, true); };
       card.appendChild(replay);
+
+      // 重排确认的第二次出现：提示这是记忆确认
+      var curSp = currentItem();
+      if (curSp && curSp.retry > 0) {
+        card.appendChild(h('<div class="small muted" style="margin-top:10px">重拼确认：再拼对一次，这个词就算过关</div>'));
+      }
 
       // 拼错过：就地亮出正确拼写，听读音后重新拼，不跳下一词
       if (s.spellMissed) {
@@ -1498,7 +1507,7 @@ window.WL = window.WL || {};
     var barWrap = el('div');
     barWrap.style.cssText = 'display:flex;height:12px;border-radius:3px;overflow:hidden;background:#EDEAE2';
     segs.forEach(function (sg) {
-      if (!sg[1]) return;
+      if (!sg[1] || !total) return;
       var d = el('div');
       d.style.cssText = 'width:' + (sg[1] / total * 100) + '%;background:' + sg[2];
       barWrap.appendChild(d);
@@ -1737,7 +1746,7 @@ window.WL = window.WL || {};
         owner: parts[0].trim(),
         repo: parts[1].trim(),
         branch: WL.sync.get().branch || 'main',
-        path: WL.sync.get().path || 'wl-progress.json'
+        path: WL.sync.get().path || 'progress.json'
       };
       if (iTok.value.trim()) patch.token = iTok.value.trim();
       WL.sync.setConf(patch);

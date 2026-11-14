@@ -122,34 +122,36 @@ window.WL = window.WL || {};
     return false;
   }
 
+  // 超期天数：按已激活通道里「最早到期」的那个算（多通道下另一个通道没到期不影响排序）
   function overdueDays(state, now, channels) {
     channels = channels || ['r', 'p'];
-    var max = 0;
+    var min = Infinity;
     for (var i = 0; i < channels.length; i++) {
       var c = state.ch[channels[i]];
-      if (c && c.n > 0 && c.due > max) max = c.due;
+      if (c && c.n > 0 && c.due && c.due < min) min = c.due;
     }
-    return (now - max) / DAY;
+    if (min === Infinity) return 0;
+    return (now - min) / DAY;
   }
 
-// 复习量预测：未来 n 天每天到期的卡片数（已斩的词不计入）
-function forecast(states, now, days, channels) {
-  channels = channels || ['r', 'p'];
-  var out = [];
-  for (var i = 0; i < days; i++) out.push(0);
-  for (var k in states) {
-    var st = states[k];
-    if (st.cut) continue;
-    for (var j = 0; j < channels.length; j++) {
-      var c = st.ch[channels[j]];
-      if (!c || c.n === 0 || !c.due) continue;
-      var idx = Math.floor((c.due - now) / DAY);
-      if (idx < 0) idx = 0;
-      if (idx < days) out[idx]++;
+  // 复习量预测：未来 n 天每天到期的卡片数（已斩的词不计入）
+  function forecast(states, now, days, channels) {
+    channels = channels || ['r', 'p'];
+    var out = [];
+    for (var i = 0; i < days; i++) out.push(0);
+    for (var k in states) {
+      var st = states[k];
+      if (st.cut) continue;
+      for (var j = 0; j < channels.length; j++) {
+        var c = st.ch[channels[j]];
+        if (!c || c.n === 0 || !c.due) continue;
+        var idx = Math.floor((c.due - now) / DAY);
+        if (idx < 0) idx = 0;
+        if (idx < days) out[idx]++;
+      }
     }
+    return out;
   }
-  return out;
-}
 
   WL.srs = {
     DAY: DAY,

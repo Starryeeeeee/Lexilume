@@ -180,6 +180,15 @@ delete stCut.cut;
 const fcBack = WL.srs.forecast(statesCut, 0, 30, ['r']);
 ok('恢复后重新计入预测', fcBack.reduce(function (a, b) { return a + b; }, 0) === 1, JSON.stringify(fcBack));
 
+console.log('\n[11b] 超期天数按最早到期通道计算');
+const stOd = WL.srs.newState(word, 0);
+WL.srs.review(stOd, 'r', true, 0);
+WL.srs.review(stOd, 'p', true, 0);
+stOd.ch.r.due = 95 * DAY;    // r 通道已超期 5 天
+stOd.ch.p.due = 110 * DAY;   // p 通道未到期
+const od = WL.srs.overdueDays(stOd, 100 * DAY, ['r', 'p']);
+ok('多通道下取最早到期（正数）', od > 4.9 && od < 5.1, od.toFixed(2));
+
 console.log('\n[12] 同步合并边界');
 const m = WL.sync;
 const sa = WL.srs.newState(word, 0);
