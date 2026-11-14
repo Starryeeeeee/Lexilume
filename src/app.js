@@ -1084,16 +1084,9 @@ window.WL = window.WL || {};
       replay.onclick = function () { WL.quiz.speak(word.w, true); };
       card.appendChild(replay);
 
-      // 重排确认的第二次出现：提示这是记忆确认
-      var curSp = currentItem();
-      if (curSp && curSp.retry > 0) {
-        card.appendChild(h('<div class="small muted" style="margin-top:10px">重拼确认：再拼对一次，这个词就算过关</div>'));
-      }
-
       // 拼错过：就地亮出正确拼写，听读音后重新拼，不跳下一词
       if (s.spellMissed) {
-        card.appendChild(h('<div class="spell-reveal"><div class="spell-correct">拼错了，正确拼写是 <b>' + q.answer + '</b></div>' +
-          '<div class="small muted" style="margin-top:6px">再听一遍读音，然后重新输入这个单词</div></div>'));
+        card.appendChild(h('<div class="spell-reveal"><div class="spell-correct">拼错了，正确拼写是 <b>' + q.answer + '</b></div></div>'));
       }
 
       var box = el('div', 'spellbox');
