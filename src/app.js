@@ -53,6 +53,19 @@ window.WL = window.WL || {};
     return d.firstElementChild;
   }
 
+  // 完成页插画：Fluent Emoji 3D（微软开源，MIT 协议）放在新拟态圆托上
+  function clayArt(file) {
+    var hero = el('div', 'clay-hero');
+    var orb = el('div', 'clay-orb');
+    var img = document.createElement('img');
+    img.src = 'assets/emoji/' + file;
+    img.alt = '';
+    img.draggable = false;
+    orb.appendChild(img);
+    hero.appendChild(orb);
+    return hero;
+  }
+
   function todayStr() { return WL.store.todayKey(); }
 
   // 当前题型集合对应的记忆通道，例如只开「看词选义」时是 ['r']
@@ -225,14 +238,22 @@ window.WL = window.WL || {};
     render();
   }
 
-  // 学有余力时的练习模式：随机抽已学词，不计入进度与统计
-  function startPractice(mode) {
+  // 学有余力时的练习模式：抽已学词巩固，不计入进度与统计
+  // scope: 'all' 随机已学 | 'wrong' 答错过(lapses≥1) | 'risk' 遗忘风险
+  function startPractice(mode, scope) {
     var book = curBook();
     if (!book) return;
     var prog = WL.store.getProgress(book.id);
-    var learned = book.words.filter(function (w) { return prog[w.id]; });
+    var now = Date.now();
+    var chs = activeChannels();
+    var learned = book.words.filter(function (w) { return prog[w.id] && !prog[w.id].cut; });
+    if (scope === 'wrong') {
+      learned = learned.filter(function (w) { return prog[w.id].lapses >= 1; });
+    } else if (scope === 'risk') {
+      learned = learned.filter(function (w) { return WL.srs.healthOf(prog[w.id], now, chs) === 'risk'; });
+    }
     if (!learned.length) {
-      toast('先学一些词再来练习');
+      toast(scope === 'wrong' ? '当前没有答错过（未斩）的词' : scope === 'risk' ? '当前没有遗忘风险词' : '先学一些词再来练习');
       return;
     }
     if (learned.length > PRACTICE_SIZE) learned = WL.quiz.shuffle(learned).slice(0, PRACTICE_SIZE);
@@ -687,11 +708,13 @@ window.WL = window.WL || {};
     wrap.appendChild(card);
 
     var startCard = el('div', 'card');
+    var dueLimited = Math.min(dueN, cfg.reviewLimit);
     var nextNew = Math.min(cfg.newLimit, total - learned);
+    var estMin = Math.max(1, Math.round((dueLimited * 15 + nextNew * 40) / 60));
     startCard.appendChild(h(
       '<div class="spread" style="margin-bottom:14px">' +
       '<div><div style="font-size:16px">今天的学习</div>' +
-      '<div class="small muted">复习 ' + Math.min(dueN, cfg.reviewLimit) + ' 个 · 新学 ' + nextNew + ' 个</div></div>' +
+      '<div class="small muted">复习 ' + dueLimited + ' 个 · 新学 ' + nextNew + ' 个 · 约 ' + estMin + ' 分钟</div></div>' +
       '<div class="small muted">上限 新' + cfg.newLimit + ' / 复' + cfg.reviewLimit + '</div>' +
       '</div>'
     ));
@@ -700,25 +723,39 @@ window.WL = window.WL || {};
     go.disabled = dueN + nextNew === 0;
     go.onclick = startSession;
     startCard.appendChild(go);
+
+    if (dueN > cfg.reviewLimit) {
+      startCard.appendChild(h('<div class="small muted" style="margin-top:10px">另有 ' + (dueN - cfg.reviewLimit) +
+        ' 个到期复习词超过今日上限，会自动排入之后几天优先补上，不会丢失。</div>'));
+    }
     wrap.appendChild(startCard);
 
     // 练习模式：学有余力时的额外巩固，不动进度
     var pc = el('div', 'card');
     pc.appendChild(el('h2', 'section', '练习模式'));
-    pc.appendChild(h('<div class="small muted" style="margin-bottom:12px">随机抽 ' + PRACTICE_SIZE +
+    pc.appendChild(h('<div class="small muted" style="margin-bottom:12px">抽 ' + PRACTICE_SIZE +
       ' 个已学词做巩固练习，答错会展示正确答案；练习不计入学习进度与统计。</div>'));
     var prow = el('div', 'row');
-    var p1 = el('button', 'btn primary', '看词选义');
-    p1.onclick = function () { startPractice('en2cn'); };
-    prow.appendChild(p1);
-    var p2 = el('button', 'btn', '看义选词');
-    p2.onclick = function () { startPractice('cn2en'); };
-    prow.appendChild(p2);
+    var selScope = el('select');
+    selScope.style.flex = '1';
+    [['all', '范围：全部已学词'], ['wrong', '范围：只练答错的词'], ['risk', '范围：只练遗忘风险词']].forEach(function (o) {
+      var op = el('option', null, o[1]);
+      op.value = o[0];
+      selScope.appendChild(op);
+    });
+    prow.appendChild(selScope);
+    var selType = el('select');
+    selType.style.flex = '1';
+    [['en2cn', '题型：看词选义'], ['cn2en', '题型：看义选词']].forEach(function (o) {
+      var op = el('option', null, o[1]);
+      op.value = o[0];
+      selType.appendChild(op);
+    });
+    prow.appendChild(selType);
+    var pgo = el('button', 'btn primary', '开始练习');
+    pgo.onclick = function () { startPractice(selType.value, selScope.value); };
+    prow.appendChild(pgo);
     pc.appendChild(prow);
-    if (!learned) {
-      p1.disabled = true;
-      p2.disabled = true;
-    }
     wrap.appendChild(pc);
 
     if (today.ok + today.bad > 0) {
@@ -857,6 +894,7 @@ window.WL = window.WL || {};
     card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">今日新学完成</div>'));
     card.appendChild(h('<div class="muted small">新学了 ' + Object.keys(s.newDone).length +
       ' 个词。要进入拼写模式吗？拼写模式只显示中文释义并朗读单词，你来拼写。</div>'));
+    card.appendChild(clayArt('party_popper_3d.png'));
 
     var go = el('button', 'btn primary block lg', '进入拼写模式（' + n + ' 词）');
     go.style.marginTop = '20px';
@@ -1092,6 +1130,8 @@ window.WL = window.WL || {};
         '<div class="ov-cell"><div class="ov-num">' + (totalDone ? Math.round(s.right / totalDone * 100) : 0) + '%</div><div class="ov-label">正确率</div></div>' +
         '</div>'
       ));
+      card.appendChild(clayArt('sparkles_3d.png'));
+
       var more = el('button', 'btn primary block lg', '再练一组');
       more.style.marginTop = '20px';
       more.onclick = function () { startPractice(s.practiceMode); };
@@ -1108,6 +1148,7 @@ window.WL = window.WL || {};
         '<div class="ov-cell"><div class="ov-num">' + (totalDone ? Math.round(s.right / totalDone * 100) : 0) + '%</div><div class="ov-label">正确率</div></div>' +
         '</div>'
       ));
+      card.appendChild(clayArt('trophy_3d.png'));
 
       var again = el('button', 'btn primary block lg', '再来一组');
       again.style.marginTop = '20px';
@@ -1136,6 +1177,7 @@ window.WL = window.WL || {};
     (WL.books || []).forEach(function (b) {
       var prog = WL.store.getProgress(b.id);
       var learned = Object.keys(prog).length;
+      var userOwned = WL.store.isUserBook(b.id);
       var btn = el('button', 'book' + (cfg.book === b.id ? ' on' : ''));
       var left = el('div');
       left.appendChild(el('div', 'book-name', b.name));
@@ -1148,6 +1190,39 @@ window.WL = window.WL || {};
         toast('已切换到「' + b.name + '」');
       };
       list.appendChild(btn);
+
+      // 自建词书：提供重命名与删除（删除不传播到远端，见确认文案）
+      if (userOwned) {
+        var acts = el('div', 'book-acts');
+        var rn = el('button', 'btn', '重命名');
+        rn.onclick = function () {
+          var name = prompt('新的词表名称', b.name);
+          if (!name || !name.trim() || name.trim() === b.name) return;
+          b.name = name.trim();
+          WL.store.upsertUserBook(b);
+          toast('已重命名');
+          render();
+        };
+        acts.appendChild(rn);
+        var del = el('button', 'btn ghost', '删除');
+        del.onclick = function () {
+          var progN = Object.keys(WL.store.getProgress(b.id)).length;
+          if (!confirm('删除「' + b.name + '」？本机将移除该词书及其 ' + progN +
+            ' 条学习进度。注意：远端 progress.json 里的进度会保留（删除不会传播）。')) return;
+          WL.books = (WL.books || []).filter(function (x) { return x.id !== b.id; });
+          WL.store.removeUserBook(b.id);
+          WL.store.resetBook(b.id);
+          delete bookCache[b.id];
+          if (WL.store.getConfig().book === b.id) {
+            WL.store.setConfig({ book: (WL.books[0] || {}).id });
+            S.bookId = (WL.books[0] || {}).id;
+          }
+          toast('已删除「' + b.name + '」');
+          render();
+        };
+        acts.appendChild(del);
+        list.appendChild(acts);
+      }
     });
     card.appendChild(list);
     wrap.appendChild(card);
@@ -1186,22 +1261,44 @@ window.WL = window.WL || {};
       if (!rows.length) { toast('没有解析到有效单词'); return; }
       var bookName = nameInput.value.trim();
       var target = curBook();
+
+      // 批内去重 + 跳过目标词书里已有的词（不区分大小写）
+      var existing = {};
+      if (!bookName && target) {
+        target.words.forEach(function (w) { existing[w.w.toLowerCase()] = 1; });
+      }
+      var seen = {};
+      var kept = [];
+      var dupCount = 0;
+      rows.forEach(function (r) {
+        var k = r.w.toLowerCase();
+        if (seen[k] || existing[k]) { dupCount++; return; }
+        seen[k] = 1;
+        kept.push(r);
+      });
+      if (!kept.length) { toast('这批词都已存在，没有导入任何内容'); return; }
+      var dupNote = dupCount ? '，跳过重复 ' + dupCount + ' 条' : '';
+
       if (bookName) {
         var id = 'u' + Date.now().toString(36);
-        var nb = { id: id, name: bookName, note: '自建词表 · ' + rows.length + ' 词', words: rows };
+        var nb = { id: id, name: bookName, note: '自建词表 · ' + kept.length + ' 词', words: kept };
         WL.books.push(nb);
+        WL.store.upsertUserBook(nb);
         bookCache[id] = null;
         WL.store.setConfig({ book: id });
         S.bookId = id;
-        toast('已新建「' + bookName + '」，共 ' + rows.length + ' 词');
+        toast('已新建「' + bookName + '」，导入 ' + kept.length + ' 词' + dupNote);
       } else if (target) {
         var start = target.words.length;
         var prefix = target.id + '-' + Date.now().toString(36) + '-';
-        rows.forEach(function (r, i) { r.id = prefix + i; target.words.push(r); });
+        kept.forEach(function (r, i) { r.id = prefix + i; target.words.push(r); });
         target.byId = null;
         bookCache[target.id] = null;
-        toast('已追加 ' + rows.length + ' 词到「' + target.name + '」');
+        if (WL.store.isUserBook(target.id)) WL.store.upsertUserBook(target);
+        toast('已追加 ' + kept.length + ' 词到「' + target.name + '」' + dupNote +
+          (WL.store.isUserBook(target.id) ? '' : '（内置词书的追加内容刷新后不保留，长期使用建议新建词表）'));
       }
+      ta.value = '';
       render();
     };
     row.appendChild(doImport);
@@ -1222,7 +1319,7 @@ window.WL = window.WL || {};
     var b2 = el('button', 'btn block ghost', '清空当前词表进度');
     b2.style.marginTop = '8px';
     b2.onclick = function () {
-      if (!confirm('确定清空「' + curBook().name + '」的学习记录？此操作不可撤销。')) return;
+      if (!confirm('确定清空「' + curBook().name + '」的本机学习进度吗？\n注意：删除不会传播——下次同步时这些进度可能从远端合并回来。')) return;
       WL.store.resetBook(curBook().id);
       toast('已清空');
     };
@@ -1260,6 +1357,22 @@ window.WL = window.WL || {};
       out.push(rec);
     });
     return out;
+  }
+
+  // 恢复前的备份校验：结构合法返回统计，否则返回错误原因字符串
+  function validateBackup(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return '不是有效的备份 JSON';
+    if (!data.books || typeof data.books !== 'object' || Array.isArray(data.books)) return '缺少词书进度数据（books 字段）';
+    var bookN = 0, wordN = 0;
+    Object.keys(data.books).forEach(function (id) {
+      var b = data.books[id];
+      if (!b || typeof b !== 'object' || Array.isArray(b)) return;
+      bookN++;
+      wordN += Object.keys(b).length;
+    });
+    if (!bookN) return '备份里没有任何词书进度';
+    var dayN = data.log && typeof data.log === 'object' && !Array.isArray(data.log) ? Object.keys(data.log).length : 0;
+    return { bookN: bookN, wordN: wordN, dayN: dayN };
   }
 
   function exportBackup() {
@@ -1521,9 +1634,23 @@ window.WL = window.WL || {};
       sv.textContent = sy.lastSync
         ? '已连接 · ' + new Date(sy.lastSync).toLocaleString('zh-CN', { hour12: false })
         : '已连接';
+      if (sy.pending) sv.textContent += ' · 有待上传的修改';
     }
     srow.appendChild(sv);
     card.appendChild(srow);
+
+    var sizeRow = el('div', 'spread');
+    sizeRow.style.padding = '0 0 14px';
+    sizeRow.appendChild(el('span', 'small', '同步数据体积'));
+    var sizeV = el('span', 'small');
+    var kb = Math.round(WL.sync.payloadSize() / 1024);
+    sizeV.textContent = '约 ' + kb + ' KB';
+    if (kb > 800) {
+      sizeV.style.color = 'var(--wrong)';
+      sizeV.textContent += '（接近 GitHub 接口上限，需要把进度按词书拆分文件）';
+    }
+    sizeRow.appendChild(sizeV);
+    card.appendChild(sizeRow);
 
     var fRepo = el('div', 'field');
     fRepo.appendChild(el('label', null, '仓库（用户名/仓库名）'));
@@ -1590,6 +1717,9 @@ window.WL = window.WL || {};
       '同步时会把两边的记录按「每个词最后一次复习的时间」合并，取更晚的那份，' +
       '所以不会出现一边覆盖另一边。' +
       '答题之后会攒二十多秒再自动提交一次，不必每次手动点。<br>' +
+      '「已同步」指 GitHub 上的文件已更新；其他设备在下次打开网站时会自动拉取到最新内容。<br>' +
+      '两点边界：同一天两台设备的学习量按天取较大值合并（不相加）；' +
+      '清空本机词书进度后，下次同步可能从远端把它合并回来（删除不会传播）。<br>' +
       '令牌只保存在本机浏览器，可以随时去 GitHub 撤销。' +
       '学习记录写在你选定的仓库里，如果仓库是公开的，这份 JSON 也会被公开读取。' +
       '</div>'));
@@ -1762,11 +1892,20 @@ window.WL = window.WL || {};
       if (!f) return;
       var reader = new FileReader();
       reader.onload = function () {
+        var data;
+        try { data = JSON.parse(reader.result); } catch (e) { toast('恢复被拒绝：文件不是合法 JSON'); return; }
+        var v = validateBackup(data);
+        if (typeof v === 'string') { toast('恢复被拒绝：' + v); return; }
+        if (!confirm('将恢复 ' + v.bookN + ' 本词书（' + v.wordN + ' 条进度）和 ' + v.dayN +
+          ' 天记录，覆盖本机现有数据。建议先「导出备份」留底。确定继续吗？')) return;
         try {
-          WL.store.importAll(JSON.parse(reader.result));
+          WL.store.importAll(data);
+          mergeUserBooks();
+          S.bookId = WL.store.getConfig().book;
+          WL.app.render();
           toast('已恢复备份');
         } catch (e) {
-          toast('文件无法识别');
+          toast('恢复失败：' + (e.message || '未知原因'));
         }
       };
       reader.readAsText(f);
@@ -1780,9 +1919,11 @@ window.WL = window.WL || {};
     var b3 = el('button', 'btn block ghost', '清空全部数据');
     b3.style.marginTop = '8px';
     b3.onclick = function () {
-      if (!confirm('将删除所有词表进度和记录，确定吗？')) return;
+      if (!confirm('将删除本机所有词书进度、自建词书和记录。\n注意：删除不会传播——下次同步时进度可能从远端合并回来（自建词书需要重新导入）。确定吗？')) return;
       WL.store.resetAll();
+      S.bookId = null;
       toast('已清空');
+      render();
     };
     c4.appendChild(b3);
     wrap.appendChild(c4);
@@ -1845,8 +1986,17 @@ window.WL = window.WL || {};
 
   /* ============ 启动 ============ */
 
+  // 把 localStorage 里持久化的自建词书并入 WL.books（boot 与恢复备份后都会调用）
+  function mergeUserBooks() {
+    WL.store.getUserBooks().forEach(function (b) {
+      var exists = (WL.books || []).some(function (x) { return x.id === b.id; });
+      if (!exists) WL.books.push(b);
+    });
+  }
+
   function boot() {
     var cfg = WL.store.getConfig();
+    mergeUserBooks();
     var books = WL.books || [];
     var ok = false;
     for (var i = 0; i < books.length; i++) {

@@ -1,8 +1,11 @@
-var CACHE = 'lexilume-v15';
+var CACHE = 'lexilume-v17';
 var ASSETS = [
   './',
   './index.html',
   './assets/style.css',
+  './assets/emoji/party_popper_3d.png',
+  './assets/emoji/trophy_3d.png',
+  './assets/emoji/sparkles_3d.png',
   './src/srs.js',
   './src/store.js',
   './src/quiz.js',

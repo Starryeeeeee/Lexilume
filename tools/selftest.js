@@ -4,9 +4,9 @@ const vm = require('vm');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
-const ctx = { window: {}, console };
+const ctx = { window: {}, console, localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } };
 vm.createContext(ctx);
-['src/srs.js', 'src/quiz.js', 'data/books.js', 'data/books-generated.js'].forEach(function (f) {
+['src/srs.js', 'src/quiz.js', 'src/sync.js', 'data/books.js', 'data/books-generated.js'].forEach(function (f) {
   vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 });
 
@@ -179,6 +179,24 @@ ok('已斩词不计入复习预测', fcCut.reduce(function (a, b) { return a + b
 delete stCut.cut;
 const fcBack = WL.srs.forecast(statesCut, 0, 30, ['r']);
 ok('恢复后重新计入预测', fcBack.reduce(function (a, b) { return a + b; }, 0) === 1, JSON.stringify(fcBack));
+
+console.log('\n[12] 同步合并边界');
+const m = WL.sync;
+const sa = WL.srs.newState(word, 0);
+WL.srs.review(sa, 'r', true, 100 * DAY);
+const sb = WL.srs.newState(word, 0);
+WL.srs.review(sb, 'r', true, 200 * DAY);
+sb.lapses = 2;
+const mp = m.mergeProgress({ w1: sa }, { w1: sb });
+ok('同词并行练习取较晚复习的那份', mp.w1.lapses === 2, 'lapses=' + mp.w1.lapses);
+const sc = WL.srs.newState(word, 0);
+sc.cut = 500 * DAY;
+const mp2 = m.mergeProgress({ w1: sa }, { w2: sc });
+ok('删除不传播：并集保留两边', Object.keys(mp2).length === 2 && !!mp2.w2.cut, JSON.stringify(Object.keys(mp2)));
+const ml = m.mergeLog({ '2026-01-01': { nw: 10, rv: 5, ok: 8, bad: 2, ms: 100 } }, { '2026-01-01': { nw: 20, rv: 3, ok: 9, bad: 1, ms: 200 } });
+ok('同日日志按字段取较大值（不相加）', ml['2026-01-01'].nw === 20 && ml['2026-01-01'].rv === 5 && ml['2026-01-01'].ok === 9, JSON.stringify(ml['2026-01-01']));
+const md = m.mergeData({ books: { a: { w1: sa } }, log: {} }, { books: { b: { w9: sb } }, log: {} });
+ok('合并按词书取并集', Object.keys(md.books).length === 2 && Object.keys(md.books.a).length === 1 && Object.keys(md.books.b).length === 1);
 
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败\n');
 process.exit(fail ? 1 : 0);

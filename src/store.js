@@ -6,7 +6,8 @@ window.WL = window.WL || {};
     config: 'wl.config.v1',
     progress: 'wl.progress.v1.',   // + bookId
     log: 'wl.log.v1',
-    streak: 'wl.streak.v1'
+    streak: 'wl.streak.v1',
+    books: 'wl.books.v1'           // 用户自建词书（内置词书在代码里，不存这里）
   };
 
   var DEFAULT_CONFIG = {
@@ -128,7 +129,7 @@ window.WL = window.WL || {};
   }
 
   function exportAll() {
-    var out = { v: 1, exportedAt: Date.now(), config: getConfig(), books: {}, log: getLog() };
+    var out = { v: 1, exportedAt: Date.now(), config: getConfig(), books: {}, log: getLog(), userBooks: getUserBooks() };
     (WL.books || []).forEach(function (b) {
       out.books[b.id] = getProgress(b.id);
     });
@@ -138,6 +139,7 @@ window.WL = window.WL || {};
   function importAll(data) {
     if (!data || !data.books) throw new Error('文件格式不对');
     if (data.config) writeJSON(K.config, data.config);
+    if (data.userBooks && Array.isArray(data.userBooks)) saveUserBooks(data.userBooks);
     Object.keys(data.books).forEach(function (id) {
       writeJSON(K.progress + id, data.books[id]);
       cache[id] = null;
@@ -164,6 +166,29 @@ window.WL = window.WL || {};
     });
     cache = {};
     dirty = {};
+  }
+
+  /* 用户自建词书的持久化：导入、重命名、删除时调用；内置词书不走这里 */
+  function getUserBooks() {
+    return readJSON(K.books, []);
+  }
+
+  function saveUserBooks(list) {
+    writeJSON(K.books, list);
+  }
+
+  function upsertUserBook(book) {
+    var list = getUserBooks().filter(function (b) { return b.id !== book.id; });
+    list.push(book);
+    saveUserBooks(list);
+  }
+
+  function removeUserBook(bookId) {
+    saveUserBooks(getUserBooks().filter(function (b) { return b.id !== bookId; }));
+  }
+
+  function isUserBook(bookId) {
+    return getUserBooks().some(function (b) { return b.id === bookId; });
   }
 
   function usage() {
@@ -211,6 +236,11 @@ window.WL = window.WL || {};
     importAll: importAll,
     resetBook: resetBook,
     resetAll: resetAll,
+    getUserBooks: getUserBooks,
+    saveUserBooks: saveUserBooks,
+    upsertUserBook: upsertUserBook,
+    removeUserBook: removeUserBook,
+    isUserBook: isUserBook,
     usage: usage,
     available: available,
     origin: origin

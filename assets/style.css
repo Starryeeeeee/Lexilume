@@ -34,7 +34,8 @@ html, body {
 }
 
 button { font-family: inherit; font-size: inherit; cursor: pointer; border: none; background: none; color: inherit; }
-input, textarea { font-family: inherit; border: none; outline: none; background: var(--bg); color: var(--ink); }
+input, textarea, select { font-family: inherit; border: none; outline: none; background: var(--bg); color: var(--ink); }
+.field select, .row select { padding: 10px 12px; border-radius: 10px; box-shadow: var(--press-xs); flex: 1; min-width: 0; }
 
 .app {
   max-width: 720px;
@@ -503,6 +504,56 @@ h2.section {
 .empty { text-align: center; padding: 70px 20px; color: var(--ink-3); }
 .empty .big { font-size: 17px; color: var(--ink-2); margin-bottom: 10px; font-weight: 600; }
 
+/* ---------- 完成页插画（Fluent Emoji 3D，MIT） ---------- */
+.clay-hero {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin: 24px 0 2px;
+}
+.clay-hero::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200px;
+  height: 200px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(47, 110, 212, 0.09), rgba(47, 110, 212, 0));
+  pointer-events: none;
+}
+.clay-orb {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: var(--raise-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: clayPop 460ms cubic-bezier(.34, 1.56, .64, 1) both,
+             clayFloat 3.4s ease-in-out 460ms infinite;
+}
+.clay-orb img {
+  width: 60px;
+  height: 60px;
+  filter: drop-shadow(0 9px 11px rgba(96, 108, 128, 0.35));
+  user-select: none;
+}
+@keyframes clayPop {
+  from { transform: scale(0.55); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes clayFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .clay-orb { animation: none; }
+}
+
 .warnbar {
   background: #F2E3E0;
   color: #8B3D35;
@@ -588,6 +639,10 @@ h2.section {
 .learn-actions .btn-cut:hover { color: var(--wrong); }
 .learn-actions .btn-go { flex: 1; }
 
+/* ---------- 词表页：自建词书的重命名/删除行 ---------- */
+.book-acts { display: flex; gap: 8px; padding: 0 6px 14px; }
+.book-acts .btn { padding: 7px 14px; font-size: 12px; }
+
 /* ---------- 登录门 ---------- */
 .lock { max-width: 420px; margin: 96px auto 0; }
 .lock-brand {
@@ -627,4 +682,6 @@ h2.section {
   .card { padding: 22px 20px; border-radius: 18px; }
   .opt { padding: 15px 16px; font-size: 15px; }
   .toast { bottom: 96px; }
+  .clay-orb { width: 92px; height: 92px; }
+  .clay-orb img { width: 54px; height: 54px; }
 }

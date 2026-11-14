@@ -56,8 +56,19 @@ window.WL = window.WL || {};
       hasToken: !!c.token,
       lastSync: c.lastSync || 0,
       lastError: c.lastError || '',
+      verified: !!c.verified,
+      pending: !!timer,
       result: lastResult
     };
+  }
+
+  // 同步数据体积估算（progress.json 写入前的字节数），用于上限预警
+  function payloadSize() {
+    try {
+      return JSON.stringify({
+        v: 1, updatedAt: 0, books: WL.store.exportAll().books, log: WL.store.getLog()
+      }).length;
+    } catch (e) { return 0; }
   }
 
   /* ---------- base64（按 UTF-8 走，避免中文乱码） ---------- */
@@ -308,6 +319,7 @@ window.WL = window.WL || {};
     setConf: setConf,
     configured: configured,
     state: state,
+    payloadSize: payloadSize,
     run: run,
     markDirty: markDirty,
     flushNow: flushNow,
