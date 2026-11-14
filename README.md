@@ -33,9 +33,15 @@ git push -u origin main
 
 访问 `https://<用户名>.github.io/Lexilume/`。手机浏览器可以「添加到主屏幕」，装成 App 之后断网也能用。
 
+## 登录
+
+打开网站的第一步是登录：粘贴访问令牌（与跨设备同步用的是同一个 Fine-grained token）。没有令牌无法进入功能界面；登录成功后本机会记住，之后打开直接进入。令牌失效会自动回到登录页；退出登录在「设置 → 跨设备同步」里。离线时已登录的设备可以照常学习，只是同步会暂停。
+
+注意：这是纯前端静态站，登录门挡的是「直接使用」；懂技术的人仍可能绕过界面，且公开仓库里的 progress.json 本身可被读取。介意后者就把数据文件指向私有仓库。
+
 ## 跨设备同步
 
-数据默认只存在「打开它的那台浏览器」里，换设备不会跟过去。要跨设备，用仓库文件当数据后端：
+登录用的令牌同时就是同步凭证，登录后同步即已开启。数据默认只存在「打开它的那台浏览器」里，换设备不会跟过去；要跨设备，用仓库文件当数据后端：
 
 1. 生成 token：GitHub → Settings → Developer settings → **Fine-grained personal access tokens** → Generate new token。
    - Repository access 只选 `Lexilume` 这一个仓库

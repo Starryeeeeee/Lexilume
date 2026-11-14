@@ -222,6 +222,7 @@ window.WL = window.WL || {};
         var cSame = load();
         cSame.lastSync = Date.now();
         cSame.lastError = '';
+        cSame.verified = true;
         save();
         lastResult = { ok: true, msg: '已同步（内容无变化）' };
         return lastResult;
@@ -254,12 +255,15 @@ window.WL = window.WL || {};
       var c = load();
       c.lastSync = Date.now();
       c.lastError = '';
+      c.verified = true;
       save();
       lastResult = { ok: true, msg: '已同步' };
       return lastResult;
     } catch (e) {
       var c2 = load();
       c2.lastError = e.message || '未知错误';
+      // 令牌类错误撤销已验证状态；网络类错误不动它，离线时已登录用户不被锁出
+      if (/token 无效|没有权限/.test(c2.lastError)) c2.verified = false;
       save();
       lastResult = { ok: false, msg: c2.lastError };
       return lastResult;

@@ -567,6 +567,19 @@ h2.section {
 .spell-correct { margin-top: 16px; font-size: 14px; color: #94403A; }
 .spell-correct b { font-size: 22px; letter-spacing: 0.04em; margin-left: 6px; }
 
+/* ---------- 登录门 ---------- */
+.lock { max-width: 420px; margin: 64px auto 0; }
+.lock-brand {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: center;
+  color: var(--ink-2);
+  text-shadow: 1px 1px 0 #fff;
+  margin-bottom: 22px;
+}
+.lock-brand span { color: var(--accent); }
+
 /* ---------- 移动端 ---------- */
 @media (max-width: 640px) {
   .app { padding: 22px 18px 100px; }

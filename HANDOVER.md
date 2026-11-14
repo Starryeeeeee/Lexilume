@@ -63,6 +63,15 @@
 
 答对只有选项变绿，420ms 后自动进下一题。底部是**固定高度**的提示行，作答前后不变——这是修过的一次抖动，别改回去。
 
+### 登录门（2026-11-14 用户要求：打开网站先登录，不能让外人直接用）
+
+- 判定函数 `loggedIn()`：`sync.configured() && conf.verified`。未登录时 render() 只画锁屏（无导航标签），boot() 直接停在 lock 视图
+- 登录 = 锁屏输入仓库 + 令牌 → `sync.run(true)` 真实校验：成功置 `conf.verified=true` 并进入首页；令牌类失败（401/403）置 verified=false，锁屏上显示原因、输入内容保留
+- 令牌被撤销：boot 时 pull 失败匹配到令牌类错误 → `lockOut()` 清配置回锁屏；**纯网络错误不动 verified**，离线时已登录设备照常学习
+- 退出登录在设置页（原「断开」改为「退出登录」）
+- 边界说明：锁屏防的是直接使用，防不了读源码绕过；公开仓库数据本身公开，介意就指向私有仓库
+- 测试时注意：改了 sw 缓存的资源必须 bump CACHE 版本号，否则 SW 缓存优先会供给旧代码，验证结果全是旧的（踩过两次）
+
 ### 存储与同步
 
 - localStorage，键前缀 `wl.`：进度 `wl.progress.v1.<bookId>`、日志 `wl.log.v1`、配置 `wl.config.v1`（cfgVersion 3，默认 activeTypes ['en2cn','cn2en']）、同步 `wl.sync.v1`（含 token）

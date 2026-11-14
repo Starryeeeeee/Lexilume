@@ -492,9 +492,25 @@ window.WL = window.WL || {};
 
   /* ============ 视图 ============ */
 
+  // 登录门的判定：令牌存在且经过一次真实校验
+  function loggedIn() {
+    return WL.sync.configured() && !!WL.sync.get().verified;
+  }
+
   function render() {
     var app = document.getElementById('app');
     app.innerHTML = '';
+    if (!loggedIn()) {
+      // 登录门：没有令牌只能看到锁屏
+      if (!WL.store.available()) app.appendChild(storageBanner());
+      app.appendChild(lockBody());
+      if (S.toast) {
+        var lt = el('div', 'toast', S.toast);
+        lt.style.cssText = 'position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#1E1C19;color:#fff;padding:9px 16px;border-radius:6px;font-size:13px;z-index:99';
+        app.appendChild(lt);
+      }
+      return;
+    }
     app.appendChild(topbar());
     if (!WL.store.available()) app.appendChild(storageBanner());
 
@@ -514,6 +530,87 @@ window.WL = window.WL || {};
       t.style.cssText = 'position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#1E1C19;color:#fff;padding:9px 16px;border-radius:6px;font-size:13px;z-index:99';
       app.appendChild(t);
     }
+  }
+
+  /* ============ 登录门 ============ */
+
+  function lockBody() {
+    var sy = WL.sync.state();
+    var wrap = el('div', 'stack lock');
+    wrap.appendChild(h('<div class="lock-brand">Lexi<span>lume</span></div>'));
+
+    var card = el('div', 'card');
+    card.appendChild(h('<div class="small muted" style="margin-bottom:16px;line-height:1.8">这是私人学习站，凭访问令牌登录后使用。登录同时会开启跨设备同步。</div>'));
+
+    var err = el('div', 'small');
+    err.style.color = 'var(--wrong)';
+    err.style.marginTop = '12px';
+    err.style.minHeight = '18px';
+    err.textContent = sy.lastError || '';
+
+    var fRepo = el('div', 'field');
+    fRepo.appendChild(el('label', null, '仓库'));
+    var iRepo = el('input');
+    iRepo.type = 'text';
+    iRepo.value = sy.owner + '/' + sy.repo;
+    fRepo.appendChild(iRepo);
+    card.appendChild(fRepo);
+
+    var fTok = el('div', 'field');
+    fTok.appendChild(el('label', null, '访问令牌'));
+    var iTok = el('input');
+    iTok.type = 'password';
+    iTok.autocomplete = 'off';
+    iTok.placeholder = '粘贴 github_pat_ 开头的令牌';
+    fTok.appendChild(iTok);
+    card.appendChild(fTok);
+
+    var btn = el('button', 'btn primary block lg', '登录');
+    btn.style.marginTop = '18px';
+    btn.onclick = function () {
+      var parts = iRepo.value.trim().split('/');
+      if (parts.length !== 2 || !parts[0].trim() || !parts[1].trim()) {
+        err.textContent = '仓库要写成 用户名/仓库名';
+        return;
+      }
+      if (!iTok.value.trim()) {
+        err.textContent = '先粘贴访问令牌';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = '登录中…';
+      err.textContent = '';
+      WL.sync.setConf({ owner: parts[0].trim(), repo: parts[1].trim(), branch: 'main', path: 'progress.json', token: iTok.value.trim() });
+      // silent：失败时不触发 finally 里的重渲染，锁屏上已输入的内容得以保留
+      WL.sync.run(true).then(function (r) {
+        if (r.ok) {
+          // 登录成功，进入正常界面
+          S.view = 'home';
+          render();
+          return;
+        }
+        // 失败留在锁屏，不重建 DOM，保留已输入内容；失败原因写入同步配置，下次渲染也会显示
+        btn.disabled = false;
+        btn.textContent = '登录';
+        err.textContent = '登录失败：' + r.msg;
+      });
+    };
+    card.appendChild(btn);
+    card.appendChild(err);
+
+    card.appendChild(h('<div class="small muted" style="margin-top:14px;line-height:1.8">令牌只保存在这台设备上，可随时在 GitHub 撤销。' +
+      '没有令牌无法进入，令牌对仓库的权限最小化为只读写这一个仓库。</div>'));
+    wrap.appendChild(card);
+    return wrap;
+  }
+
+  // 令牌失效或退出登录后回到锁屏
+  function lockOut(msg) {
+    S.session = null;
+    S.view = 'lock';
+    WL.sync.clear();
+    if (msg) toast(msg);
+    render();
   }
 
   function topbar() {
@@ -1404,12 +1501,10 @@ window.WL = window.WL || {};
     };
     row.appendChild(bNow);
 
-    var bOff = el('button', 'btn ghost', '断开');
+    var bOff = el('button', 'btn ghost', '退出登录');
     bOff.onclick = function () {
-      if (!confirm('断开后本机仍保留现有记录，只是不再与仓库同步。确定吗？')) return;
-      WL.sync.clear();
-      toast('已断开');
-      render();
+      if (!confirm('退出后本机学习数据保留，但需要重新输入令牌才能继续使用。确定退出吗？')) return;
+      lockOut('已退出登录');
     };
     row.appendChild(bOff);
     card.appendChild(row);
@@ -1685,8 +1780,26 @@ window.WL = window.WL || {};
       WL.store.setConfig({ book: books[0].id });
     }
     S.bookId = WL.store.getConfig().book;
+
+    // 登录门：未登录（或令牌未通过校验）只能停在锁屏
+    if (!loggedIn()) {
+      S.view = 'lock';
+      render();
+      return;
+    }
     render();
-    if (WL.sync) WL.sync.pullOnBoot();
+    WL.sync.run(true).then(function (r) {
+      if (!r.ok) {
+        // 令牌被撤销/过期时锁回登录页；纯网络问题不锁，离线也能继续学
+        if (/token 无效|没有权限/.test(r.msg)) {
+          lockOut('登录已失效，请重新登录');
+          return;
+        }
+        render();
+        return;
+      }
+      render();
+    });
   }
 
   // 切走页面前把没提交的改动推上去
