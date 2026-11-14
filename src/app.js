@@ -782,7 +782,7 @@ window.WL = window.WL || {};
     pc.appendChild(el('h2', 'section', '练习模式'));
     var todayPr = today.pr || 0;
     pc.appendChild(h('<div class="small muted" style="margin-bottom:14px">抽 ' + PRACTICE_SIZE +
-      ' 个已学词做巩固练习，答错会展示正确答案；不计入记忆调度。' +
+      ' 个已学词做巩固练习，答错会展示正确答案。' +
       (todayPr ? '今天已练 ' + todayPr + ' 题。' : '') + '</div>'));
 
     pc.appendChild(h('<div class="small muted" style="margin:0 0 8px">范围</div>'));
@@ -948,7 +948,7 @@ window.WL = window.WL || {};
     var wrap = el('div', 'stack');
     var card = el('div', 'card');
     card.style.textAlign = 'center';
-    card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">今日新学完成</div>'));
+    card.appendChild(h('<div style="font-size:24px;margin-bottom:6px">今日新学完成</div>'));
     card.appendChild(h('<div class="muted small">新学了 ' + Object.keys(s.newDone).length +
       ' 个词。要进入拼写模式吗？拼写模式只显示中文释义并朗读单词，你来拼写。</div>'));
     card.appendChild(clayArt('party_popper_3d.png'));
@@ -1185,8 +1185,8 @@ window.WL = window.WL || {};
 
     if (s.practiceMode) {
       var todayPr = WL.store.getToday().pr || 0;
-      card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">本轮练习完成</div>'));
-      card.appendChild(h('<div class="muted small">不计入记忆调度 · 今天累计练习 ' + todayPr + ' 题</div>'));
+      card.appendChild(h('<div style="font-size:24px;margin-bottom:6px">本轮练习完成</div>'));
+      card.appendChild(h('<div class="muted small">今天累计练习 ' + todayPr + ' 题</div>'));
       card.appendChild(clayArt('sparkles_3d.png'));
       card.appendChild(h(
         '<div class="overview" style="margin-top:20px;grid-template-columns:repeat(3,1fr)">' +
@@ -1202,7 +1202,7 @@ window.WL = window.WL || {};
       card.appendChild(more);
     } else {
       var mins = Math.max(1, Math.round((Date.now() - s.t0) / 60000));
-      card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">本轮学习完成</div>'));
+      card.appendChild(h('<div style="font-size:24px;margin-bottom:6px">本轮学习完成</div>'));
       card.appendChild(h('<div class="muted small">用时约 ' + mins + ' 分钟</div>'));
       card.appendChild(clayArt('trophy_3d.png'));
       card.appendChild(h(
@@ -1589,7 +1589,7 @@ window.WL = window.WL || {};
     var c6 = el('div', 'card');
     c6.appendChild(el('h2', 'section', '已斩'));
     if (!cutList.length) {
-      c6.appendChild(h('<div class="small muted">暂无已斩的词。学习新词时点「斩」，确定掌握的词就会移出复习计划。</div>'));
+      c6.appendChild(h('<div class="small muted">暂无已斩的词。</div>'));
     } else {
       var cl = el('div', 'wronglist');
       cutList.slice(0, 30).forEach(function (x) {
