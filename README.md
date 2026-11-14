@@ -23,22 +23,22 @@
 在 GitHub 建一个空仓库，然后：
 
 ```bash
-git remote add origin ssh://git@ssh.github.com:443/<用户名>/wordbeat.git
+git remote add origin ssh://git@ssh.github.com:443/<用户名>/Lexilume.git
 git push -u origin main
 ```
 
 到仓库 Settings → Pages，Source 选 `Deploy from a branch`，分支 `main`、目录 `/ (root)`，保存后等一分钟。
 
-访问 `https://<用户名>.github.io/wordbeat/`。手机浏览器可以「添加到主屏幕」，装成 App 之后断网也能用。
+访问 `https://<用户名>.github.io/Lexilume/`。手机浏览器可以「添加到主屏幕」，装成 App 之后断网也能用。
 
 ## 跨设备同步
 
 数据默认只存在「打开它的那台浏览器」里，换设备不会跟过去。要跨设备，用仓库文件当数据后端：
 
 1. 生成 token：GitHub → Settings → Developer settings → **Fine-grained personal access tokens** → Generate new token。
-   - Repository access 只选 `wordbeat` 这一个仓库
+   - Repository access 只选 `Lexilume` 这一个仓库
    - Permissions 里只给 **Contents: Read and write**
-2. 打开网站 → 设置 → 跨设备同步，仓库填 `<用户名>/wordbeat`，令牌粘贴进去，点「保存并同步」。
+2. 打开网站 → 设置 → 跨设备同步，仓库填 `<用户名>/Lexilume`，令牌粘贴进去，点「保存并同步」。
 
 之后每次答题会攒二十多秒自动提交一次，打开页面时也会自动拉取。合并规则是**每个词取最后一次复习时间更晚的那份**，两台机器各学各的，不会互相覆盖。内容没有变化时不会向仓库提交，避免产生空 commit。
 

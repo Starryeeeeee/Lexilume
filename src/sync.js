@@ -19,7 +19,7 @@ window.WL = window.WL || {};
       conf = {};
     }
     conf.owner = conf.owner || 'Starryeeeeee';
-    conf.repo = conf.repo || 'wordbeat';
+    conf.repo = conf.repo || 'Lexilume';
     conf.branch = conf.branch || 'main';
     conf.path = conf.path || 'progress.json';
     return conf;
@@ -294,7 +294,7 @@ window.WL = window.WL || {};
   }
 
   function clear() {
-    conf = { owner: 'Starryeeeeee', repo: 'wordbeat', branch: 'main', path: 'progress.json' };
+    conf = { owner: 'Starryeeeeee', repo: 'Lexilume', branch: 'main', path: 'progress.json' };
     try { localStorage.removeItem(KEY); } catch (e) { /* 忽略 */ }
     lastResult = null;
   }

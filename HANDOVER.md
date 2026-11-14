@@ -4,11 +4,11 @@
 
 ## 一、这是什么
 
-**词律 wordbeat** —— 一个可自行部署的单词学习网站，学习流程对标百词斩，调度算法用的是简化版 FSRS。
+**词律**（GitHub 仓库名 **Lexilume**，界面顶栏品牌仍是「词律」）—— 一个可自行部署的单词学习网站，学习流程对标百词斩，调度算法用的是简化版 FSRS。
 
 - 纯静态、零构建、零依赖：没有 npm、没有框架、没有后端
 - 使用者目前只有一人（高二学生，家里和学校各一台电脑，都不会被还原）
-- 仓库规划名：`Starryeeeeee/wordbeat`，地址将是 `https://starryeeeeee.github.io/wordbeat/`
+- 仓库：Starryeeeeee/Lexilume，地址将是 `https://starryeeeeee.github.io/Lexilume/`
 
 ## 二、当前状态（2026-11-14，第二版）
 
@@ -27,18 +27,17 @@
 
 **网络实测（家里电脑）**：`api.github.com` ✅ 通、`<用户名>.github.io` ✅ 通、`github.com` 网页 ❌ 不通、`raw.githubusercontent.com` ❌ 不通。同步与访问恰好都不依赖被墙的两项。学校电脑待实测。
 
-**卡住的唯一一步：** GitHub 仓库还没建。本地分支已改名 `main`（原来是 master，与文档里 `git push origin main` 对不上），remote 已指向 `wordbeat.git`，SSH 通道已验证可达（`ls-remote` 返回 Repository not found，说明握手通了、只差仓库存在）。注意 SSH 用的 `gh_deploy` 密钥在 `.workbuddy` 下，名字像单仓库部署密钥——若建仓推送时报无权限，需在仓库 Settings → Deploy keys 里添加 `gh_deploy.pub` 并勾选 write。
+**仓库已建**：`Starryeeeeee/Lexilume`（2026-11-14 用户建好，空仓库）。本地分支已改名 `main`（原来是 master），remote 已指向 `Lexilume.git`，SSH 通道已实测可达。SSH 用的 `gh_deploy` 密钥在 `.workbuddy` 下，对 Lexilume 的访问权已通过 `ls-remote` 验证。
 
 ## 三、上线待办（按顺序做）
 
-1. **建仓库**：https://github.com/new?name=wordbeat ，选 Public，**不要**勾选 Add README / .gitignore / license
-2. **推送**：`git push -u origin main`（分支已是 main）
-3. **开 Pages**：仓库 Settings → Pages → Deploy from a branch → `main` / `(root)` → 约一分钟后访问上面那个网址
-4. **生成 token**：GitHub → Settings → Developer settings → Fine-grained personal access tokens
-   - Repository access 只勾 `wordbeat` 这一个
+1. **推送**：`git push -u origin main`（分支已是 main）
+2. **开 Pages**：仓库 Settings → Pages → Deploy from a branch → `main` / `(root)` → 约一分钟后访问 `https://starryeeeeee.github.io/Lexilume/`
+3. **生成 token**：GitHub → Settings → Developer settings → Fine-grained personal access tokens
+   - Repository access 只勾 `Lexilume` 这一个
    - Permissions 只给 **Contents: Read and write**
-5. **配置同步**：打开网站 → 设置 → 跨设备同步 → 仓库填 `<用户名>/wordbeat`，粘贴 token → 保存并同步
-6. **学校电脑实测**：能否打开 github.io 网址 + 同步是否成功
+4. **配置同步**：打开网站 → 设置 → 跨设备同步 → 仓库填 `Starryeeeeee/Lexilume`，粘贴 token → 保存并同步
+5. **学校电脑实测**：能否打开 github.io 网址 + 同步是否成功
 
 ## 四、关键设计决策（改动前先读）
 

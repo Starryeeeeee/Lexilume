@@ -1,4 +1,4 @@
-var CACHE = 'wordbeat-v3';
+var CACHE = 'wordbeat-v4';
 var ASSETS = [
   './',
   './index.html',

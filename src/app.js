@@ -537,7 +537,7 @@ window.WL = window.WL || {};
       '<div class="small" style="margin-top:8px;line-height:1.85">' +
       '预览窗口和一些嵌入环境会把浏览器的存储隔离成一次性的，关掉就清空。换下面任意一种方式打开就能正常记录：<br>' +
       '① 双击文件夹里的 <code>index.html</code>，数据存在本机浏览器，断网也照常<br>' +
-      '② 部署之后用网址打开，例如 <code>https://starryeeeeee.github.io/wordbeat/</code><br>' +
+      '② 部署之后用网址打开，例如 <code>https://starryeeeeee.github.io/Lexilume/</code><br>' +
       '③ 只想临时留存，去「设置 → 导出备份」存一个 JSON，换环境再导回来' +
       '</div>';
     return d;
