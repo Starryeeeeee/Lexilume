@@ -264,6 +264,7 @@ window.WL = window.WL || {};
       WL.store.bumpLog('bad');
     }
     WL.store.flush();
+    if (WL.sync) WL.sync.markDirty();
   }
 
   function advanceCorrect() {
@@ -1034,6 +1035,107 @@ window.WL = window.WL || {};
 
   /* ============ 设置 ============ */
 
+  function syncCard() {
+    var sy = WL.sync.state();
+    var card = el('div', 'card');
+    card.appendChild(el('h2', 'section', '跨设备同步'));
+
+    var srow = el('div', 'spread');
+    srow.style.padding = '0 0 14px';
+    srow.appendChild(el('span', 'small', '状态'));
+    var sv = el('span', 'small');
+    sv.style.textAlign = 'right';
+    if (!sy.configured) {
+      sv.style.color = 'var(--ink-3)';
+      sv.textContent = '未配置';
+    } else if (sy.busy) {
+      sv.style.color = 'var(--accent-deep)';
+      sv.textContent = '同步中…';
+    } else if (sy.lastError) {
+      sv.style.color = 'var(--wrong)';
+      sv.textContent = sy.lastError;
+    } else {
+      sv.style.color = 'var(--accent-deep)';
+      sv.textContent = sy.lastSync
+        ? '已连接 · ' + new Date(sy.lastSync).toLocaleString('zh-CN', { hour12: false })
+        : '已连接';
+    }
+    srow.appendChild(sv);
+    card.appendChild(srow);
+
+    var fRepo = el('div', 'field');
+    fRepo.appendChild(el('label', null, '仓库（用户名/仓库名）'));
+    var iRepo = el('input');
+    iRepo.type = 'text';
+    iRepo.value = sy.owner + '/' + sy.repo;
+    fRepo.appendChild(iRepo);
+    card.appendChild(fRepo);
+
+    var fTok = el('div', 'field');
+    fTok.appendChild(el('label', null, '访问令牌'));
+    var iTok = el('input');
+    iTok.type = 'password';
+    iTok.autocomplete = 'off';
+    iTok.placeholder = sy.hasToken ? '已保存，留空则不修改' : 'github_pat_ 开头的那串';
+    fTok.appendChild(iTok);
+    card.appendChild(fTok);
+
+    var row = el('div', 'row');
+    var bSave = el('button', 'btn primary', sy.configured ? '保存并同步' : '保存并同步');
+    bSave.onclick = function () {
+      var parts = iRepo.value.trim().split('/');
+      if (parts.length !== 2 || !parts[0].trim() || !parts[1].trim()) {
+        toast('仓库要写成 用户名/仓库名');
+        return;
+      }
+      var patch = {
+        owner: parts[0].trim(),
+        repo: parts[1].trim(),
+        branch: WL.sync.get().branch || 'main',
+        path: WL.sync.get().path || 'wl-progress.json'
+      };
+      if (iTok.value.trim()) patch.token = iTok.value.trim();
+      WL.sync.setConf(patch);
+      bSave.disabled = true;
+      bSave.textContent = '同步中…';
+      WL.sync.run(false).then(function (r) {
+        toast(r.ok ? '同步成功' : ('失败：' + r.msg));
+        render();
+      });
+    };
+    row.appendChild(bSave);
+
+    var bNow = el('button', 'btn', '立即同步');
+    bNow.onclick = function () {
+      if (!WL.sync.configured()) { toast('先填令牌'); return; }
+      bNow.disabled = true;
+      WL.sync.run(false).then(function (r) {
+        toast(r.ok ? '已同步' : ('失败：' + r.msg));
+        render();
+      });
+    };
+    row.appendChild(bNow);
+
+    var bOff = el('button', 'btn ghost', '断开');
+    bOff.onclick = function () {
+      if (!confirm('断开后本机仍保留现有记录，只是不再与仓库同步。确定吗？')) return;
+      WL.sync.clear();
+      toast('已断开');
+      render();
+    };
+    row.appendChild(bOff);
+    card.appendChild(row);
+
+    card.appendChild(h('<div class="small muted" style="margin-top:16px;line-height:1.85">' +
+      '同步时会把两边的记录按「每个词最后一次复习的时间」合并，取更晚的那份，' +
+      '所以不会出现一边覆盖另一边。' +
+      '答题之后会攒二十多秒再自动提交一次，不必每次手动点。<br>' +
+      '令牌只保存在本机浏览器，可以随时去 GitHub 撤销。' +
+      '学习记录写在你选定的仓库里，如果仓库是公开的，这份 JSON 也会被公开读取。' +
+      '</div>'));
+    return card;
+  }
+
   function viewSettings() {
     var cfg = WL.store.getConfig();
     var wrap = el('div', 'stack');
@@ -1070,8 +1172,10 @@ window.WL = window.WL || {};
     c0.appendChild(h('<div class="small muted" style="margin-top:12px;line-height:1.8">' +
       '数据按「打开方式」分开存放。换一个地址打开就是另一份空记录，' +
       '比如从预览窗口换到双击 index.html，数据不会自动跟过去。' +
-      '搬家请用下面的导出与恢复。</div>'));
+      '搬家请用下面的导出与恢复，或者配置跨设备同步。</div>'));
     wrap.appendChild(c0);
+
+    if (WL.sync) wrap.appendChild(syncCard());
 
     var c1 = el('div', 'card');
     c1.appendChild(el('h2', 'section', '每日配额'));
@@ -1260,7 +1364,15 @@ window.WL = window.WL || {};
     }
     S.bookId = WL.store.getConfig().book;
     render();
+    if (WL.sync) WL.sync.pullOnBoot();
   }
+
+  // 切走页面前把没提交的改动推上去
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden' && WL.sync && WL.sync.configured()) {
+      WL.sync.flushNow();
+    }
+  });
 
   WL.app = { boot: boot, startSession: startSession, render: render, state: S };
 

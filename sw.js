@@ -1,4 +1,4 @@
-var CACHE = 'cile-v1';
+var CACHE = 'wordbeat-v2';
 var ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ var ASSETS = [
   './src/srs.js',
   './src/store.js',
   './src/quiz.js',
+  './src/sync.js',
   './src/app.js',
   './data/books.js',
   './manifest.webmanifest'
