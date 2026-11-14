@@ -598,8 +598,11 @@ window.WL = window.WL || {};
     card.appendChild(btn);
     card.appendChild(err);
 
-    card.appendChild(h('<div class="small muted" style="margin-top:14px;line-height:1.8">令牌只保存在这台设备上，可随时在 GitHub 撤销。' +
-      '没有令牌无法进入，令牌对仓库的权限最小化为只读写这一个仓库。</div>'));
+    // 快捷入口：直达 GitHub 新建令牌页
+    card.appendChild(h('<div class="small" style="margin-top:16px">没有令牌？<a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">去 GitHub 生成访问令牌</a>' +
+      '<span class="muted">（勾选 Lexilume 仓库，给 Contents 读写）</span></div>'));
+
+    card.appendChild(h('<div class="small muted" style="margin-top:14px;line-height:1.8">令牌只保存在这台设备上，可随时在 GitHub 撤销。</div>'));
     wrap.appendChild(card);
     return wrap;
   }
