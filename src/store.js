@@ -7,7 +7,8 @@ window.WL = window.WL || {};
     progress: 'wl.progress.v1.',   // + bookId
     log: 'wl.log.v1',
     streak: 'wl.streak.v1',
-    books: 'wl.books.v1'           // 用户自建词书（内置词书在代码里，不存这里）
+    books: 'wl.books.v1',          // 用户自建词书（内置词书在代码里，不存这里）
+    session: 'wl.session.v1'       // 未完成会话的快照（断点续学）
   };
 
   var DEFAULT_CONFIG = {
@@ -191,6 +192,19 @@ window.WL = window.WL || {};
     return getUserBooks().some(function (b) { return b.id === bookId; });
   }
 
+  /* 未完成会话的快照：每次渲染时保存，重启后可断点续学 */
+  function saveSession(snapshot) {
+    writeJSON(K.session, snapshot);
+  }
+
+  function getSession() {
+    return readJSON(K.session, null);
+  }
+
+  function removeSession() {
+    try { localStorage.removeItem(K.session); } catch (e) { /* 忽略 */ }
+  }
+
   function usage() {
     var total = 0;
     try {
@@ -241,6 +255,9 @@ window.WL = window.WL || {};
     upsertUserBook: upsertUserBook,
     removeUserBook: removeUserBook,
     isUserBook: isUserBook,
+    saveSession: saveSession,
+    getSession: getSession,
+    removeSession: removeSession,
     usage: usage,
     available: available,
     origin: origin

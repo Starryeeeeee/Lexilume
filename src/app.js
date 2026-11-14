@@ -105,7 +105,7 @@ window.WL = window.WL || {};
 
   /* ============ 会话 ============ */
 
-  function startSession() {
+  function startSession(reviewOnly) {
     var cfg = WL.store.getConfig();
     var book = curBook();
     if (!book) return;
@@ -123,17 +123,18 @@ window.WL = window.WL || {};
     });
     due = due.slice(0, cfg.reviewLimit);
 
-    var fresh = book.words.filter(function (w) { return !prog[w.id]; });
+    var fresh = reviewOnly ? [] : book.words.filter(function (w) { return !prog[w.id]; });
     if (cfg.shuffleNew) fresh = WL.quiz.shuffle(fresh);
     fresh = fresh.slice(0, cfg.newLimit);
 
     if (!due.length && !fresh.length) {
-      toast('当前没有要学的内容，可以先导入词表');
+      toast(reviewOnly ? '当前没有到期复习的词' : '当前没有要学的内容，可以先导入词表');
       return;
     }
 
     S.session = {
       phase: 'review',
+      reviewOnly: !!reviewOnly,
       learn: fresh.map(function (w) { return w.id; }),
       li: 0,
       reviewWids: due.map(function (x) { return x.w.id; }),
@@ -241,6 +242,7 @@ window.WL = window.WL || {};
       WL.store.bumpLog('ms', Date.now() - s.t0);
     }
     s.phase = 'done';
+    WL.store.removeSession();
     S.view = 'study';
     render();
   }
@@ -251,6 +253,7 @@ window.WL = window.WL || {};
     if (!s) return;
     s.ended = true;
     s.phase = 'done';
+    WL.store.removeSession();
     S.view = 'study';
     render();
   }
@@ -377,9 +380,10 @@ window.WL = window.WL || {};
     var q = WL.quiz.build(word, type, curBook().words) ||
       WL.quiz.build(word, 'en2cn', curBook().words);
     s.q = q;
-    // 拼写就地重拼的状态：每道拼写题首次作答计分，之后重拼不计
+    // 每道题的状态：首次计分标记与拼写就地重拼状态
     s.spellGraded = false;
     s.spellMissed = false;
+    s.itemGraded = false;
 
     if (type === 'audio2cn') WL.quiz.speak(word.w, cfg.sound);
     if (type === 'spell') WL.quiz.speak(word.w, cfg.sound);
@@ -461,6 +465,7 @@ window.WL = window.WL || {};
     var s = S.session;
     var cur = currentItem();
     if (!cur) return;
+    s.itemGraded = true;
     if (cur.from === 'practice') {
       // 练习模式：不计入记忆调度，但计入每日练习量（激励用）
       if (ok) s.right++; else s.wrong++;
@@ -574,12 +579,20 @@ window.WL = window.WL || {};
     if (S.view === 'study') body = viewStudy();
     else if (S.view === 'learn') body = viewLearn();
     else if (S.view === 'spellask') body = viewSpellAsk();
+    else if (S.view === 'resume') body = viewResume();
     else if (S.view === 'books') body = viewBooks();
     else if (S.view === 'stats') body = viewStats();
     else if (S.view === 'settings') body = viewSettings();
     else body = viewHome();
 
     app.appendChild(body);
+
+    // 断点续学：会话快照随渲染保存；没有会话时清掉残留快照
+    if (loggedIn() && S.session) {
+      try { WL.store.saveSession(JSON.parse(JSON.stringify(S.session))); } catch (e) { /* 快照失败忽略 */ }
+    } else if (loggedIn() && !S.session) {
+      WL.store.removeSession();
+    }
 
     if (S.toast) {
       var t = el('div', 'toast', S.toast);
@@ -668,7 +681,61 @@ window.WL = window.WL || {};
     S.session = null;
     S.view = 'lock';
     WL.sync.clear();
+    WL.store.removeSession();
     if (msg) toast(msg);
+    render();
+  }
+
+  /* ============ 断点续学 ============ */
+
+  function remainingText(s) {
+    if (s.phase === 'review') return '复习剩 ' + Math.max(0, s.items.length - s.i) + ' 题';
+    if (s.phase === 'quiz') return '新学第 ' + (s.li + 1) + ' / ' + s.learn.length + ' 词';
+    if (s.phase === 'spell') return '拼写剩 ' + Math.max(0, s.items.length - s.i) + ' 题';
+    if (s.phase === 'spellask') return '拼写待开始';
+    if (s.phase === 'practice') return '练习剩 ' + Math.max(0, s.items.length - s.i) + ' 题';
+    return '进行中';
+  }
+
+  function viewResume() {
+    var s = S.session;
+    var wrap = el('div', 'stack');
+    var card = el('div', 'card');
+    card.style.textAlign = 'center';
+    card.appendChild(h('<div style="font-size:24px;margin-bottom:6px">上次学习未完成</div>'));
+    card.appendChild(h('<div class="muted small">还剩 ' + remainingText(s) + '。继续吗？</div>'));
+
+    var go = el('button', 'btn primary block lg', '继续本轮');
+    go.style.marginTop = '20px';
+    go.onclick = resumeSession;
+    card.appendChild(go);
+
+    var fresh = el('button', 'btn ghost block', '重新开始');
+    fresh.style.marginTop = '8px';
+    fresh.onclick = function () {
+      WL.store.removeSession();
+      S.session = null;
+      startSession();
+    };
+    card.appendChild(fresh);
+
+    wrap.appendChild(card);
+    return wrap;
+  }
+
+  // 恢复快照。若快照停在某题的展示态（该题已计分），跳过它不重复计分
+  function resumeSession() {
+    var s = S.session;
+    if (!s) return;
+    if (s.answered && s.itemGraded) {
+      s.answered = null;
+      S.view = 'study';
+      advanceCorrect();
+      return;
+    }
+    if (s.phase === 'learn') S.view = 'learn';
+    else if (s.phase === 'spellask') S.view = 'spellask';
+    else S.view = 'study';
     render();
   }
 
@@ -766,10 +833,18 @@ window.WL = window.WL || {};
       '</div>'
     ));
 
-    var go = el('button', 'btn primary block lg', dueN + nextNew > 0 ? '开始' : '没有待学内容');
+    var goRow = el('div', 'learn-actions');
+    if (dueN > 0) {
+      var ro = el('button', 'btn lg', '只复习');
+      ro.style.cssText = 'flex:none;width:96px;color:var(--ink-2)';
+      ro.onclick = function () { startSession(true); };
+      goRow.appendChild(ro);
+    }
+    var go = el('button', 'btn primary lg btn-go', dueN + nextNew > 0 ? '开始' : '没有待学内容');
     go.disabled = dueN + nextNew === 0;
-    go.onclick = startSession;
-    startCard.appendChild(go);
+    go.onclick = function () { startSession(false); };
+    goRow.appendChild(go);
+    startCard.appendChild(goRow);
 
     if (dueN > cfg.reviewLimit) {
       startCard.appendChild(h('<div class="small muted" style="margin-top:10px">另有 ' + (dueN - cfg.reviewLimit) +
@@ -1298,7 +1373,7 @@ window.WL = window.WL || {};
     hint.style.marginBottom = '10px';
     hint.innerHTML = '每行一个词，用逗号或制表符分隔：<br>' +
       '<code class="small">word, 音标, 词性, 释义, 例句, 例句翻译</code><br>' +
-      '后四项可以留空，只写 <code>word, 释义</code> 也可以。';
+      '后四项可以留空，只写 <code>word, 释义</code> 也可以；含逗号的字段用英文双引号包裹。';
     imp.appendChild(hint);
 
     var nameField = el('div', 'field');
@@ -1393,6 +1468,31 @@ window.WL = window.WL || {};
     return wrap;
   }
 
+  // 按分隔符拆一行，支持英文双引号包裹（含分隔符或转义 "" 的字段）
+  function splitLine(line, sep) {
+    var out = [], cur = '', q = false, i, ch;
+    for (i = 0; i < line.length; i++) {
+      ch = line[i];
+      if (q) {
+        if (ch === '"') {
+          if (line[i + 1] === '"') { cur += '"'; i++; }
+          else { q = false; }
+        } else {
+          cur += ch;
+        }
+      } else if (ch === '"' && cur === '') {
+        q = true;
+      } else if (ch === sep) {
+        out.push(cur);
+        cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+    out.push(cur);
+    return out.map(function (s) { return s.trim(); });
+  }
+
   function parseRows(text) {
     var lines = text.split(/\r?\n/);
     var out = [];
@@ -1401,7 +1501,7 @@ window.WL = window.WL || {};
       line = line.trim();
       if (!line || /^#/.test(line)) return;
       var sep = line.indexOf('\t') >= 0 ? '\t' : ',';
-      var p = line.split(sep).map(function (s) { return s.trim(); });
+      var p = splitLine(line, sep);
       if (p.length < 2) return;
       var w = p[0];
       if (!/^[a-zA-Z][a-zA-Z\s'\-\.]*$/.test(w)) return;
@@ -2209,6 +2309,15 @@ window.WL = window.WL || {};
       render();
       return;
     }
+
+    // 断点续学：有未完成会话快照时先询问
+    var saved = WL.store.getSession();
+    if (saved && saved._v === 1 && saved.phase && saved.phase !== 'done' && !saved.ended) {
+      S.session = saved;
+      S.view = 'resume';
+      render();
+      return;
+    }
     render();
     WL.sync.run(true).then(function (r) {
       if (!r.ok) {
@@ -2224,10 +2333,18 @@ window.WL = window.WL || {};
     });
   }
 
-  // 切走页面前把没提交的改动推上去
+  // 切走页面前把没提交的改动推上去；有未完成会话时轻提示
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'hidden' && WL.sync && WL.sync.configured()) {
       WL.sync.flushNow();
+    }
+  });
+
+  window.addEventListener('beforeunload', function (e) {
+    var s = S.session;
+    if (s && !s.ended && loggedIn()) {
+      e.preventDefault();
+      e.returnValue = '';
     }
   });
 
