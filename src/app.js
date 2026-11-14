@@ -83,9 +83,7 @@ window.WL = window.WL || {};
     var due = [];
     book.words.forEach(function (w) {
       var st = prog[w.id];
-      if (st && WL.srs.dueNow(st, now, chs)) {
-        due.push({ w: w, st: st });
-      }
+      if (st && WL.srs.dueNow(st, now, chs)) due.push({ w: w, st: st });
     });
     due.sort(function (a, b) {
       return WL.srs.overdueDays(b.st, now, chs) - WL.srs.overdueDays(a.st, now, chs);
@@ -96,37 +94,71 @@ window.WL = window.WL || {};
     if (cfg.shuffleNew) fresh = WL.quiz.shuffle(fresh);
     fresh = fresh.slice(0, cfg.newLimit);
 
-    var items = [];
-    due.forEach(function (x) {
-      items.push({ wid: x.w.id, from: 'review', stage: 'test', retry: 0 });
-    });
-    fresh.forEach(function (w) {
-      items.push({ wid: w.id, from: 'new', stage: 'show', retry: 0 });
-    });
-
-    if (!items.length) {
+    if (!due.length && !fresh.length) {
       toast('当前没有要学的内容，可以先导入词表');
       return;
     }
 
     S.session = {
-      items: items,
+      phase: fresh.length ? 'learn' : 'test',
+      learn: fresh.map(function (w) { return w.id; }),
+      li: 0,
+      reviewWids: due.map(function (x) { return x.w.id; }),
+      items: [],
       i: 0,
-      total: items.length,
+      total: 0,
+      retryCard: false,
       bookId: book.id,
       t0: now,
       q: null,
       answered: null,
       newDone: {},
       revDone: {},
-      spokenFor: -1,
+      spokenFor: '',
       right: 0,
       wrong: 0
     };
-    S.view = 'study';
-    S.flash = null;
-    prepare();
+
+    if (S.session.phase === 'learn') {
+      S.view = 'learn';
+    } else {
+      buildTestQueue();
+      S.view = 'study';
+    }
     render();
+  }
+
+  // 学习阶段走完，统一组卷：先复习后新学
+  function buildTestQueue() {
+    var s = S.session;
+    var items = [];
+    s.reviewWids.forEach(function (id) {
+      items.push({ wid: id, from: 'review', retry: 0 });
+    });
+    s.learn.forEach(function (id) {
+      items.push({ wid: id, from: 'new', retry: 0 });
+    });
+    s.items = items;
+    s.i = 0;
+    s.total = items.length;
+    s.phase = 'test';
+    prepare();
+  }
+
+  function markLearned(wid, word) {
+    var s = S.session;
+    var prog = WL.store.getProgress(s.bookId);
+    var st = prog[wid];
+    if (st) return st;
+    st = WL.srs.newState(word, Date.now());
+    st.seen = 0;
+    WL.store.putProgress(s.bookId, wid, st);
+    WL.store.flush();
+    if (!s.newDone[wid]) {
+      s.newDone[wid] = 1;
+      WL.store.bumpLog('nw');
+    }
+    return st;
   }
 
   function currentItem() {
@@ -138,11 +170,10 @@ window.WL = window.WL || {};
   function prepare() {
     var s = S.session;
     var cur = currentItem();
+    s.answered = null;
     if (!cur) { s.q = null; return; }
     var word = wordOf(cur.wid);
     if (!word) { s.q = null; return; }
-
-    if (cur.stage === 'show') { s.q = null; return; }
 
     var cfg = WL.store.getConfig();
     var prog = WL.store.getProgress(s.bookId);
@@ -151,36 +182,36 @@ window.WL = window.WL || {};
     var channel = 'r';
 
     if (cur.from === 'review' && st) {
-      channel = WL.srs.weakestChannel(st, now, activeChannels());
-      if (activeChannels().indexOf(channel) < 0) channel = 'r';
+      var chs = activeChannels();
+      channel = WL.srs.weakestChannel(st, now, chs);
+      if (chs.indexOf(channel) < 0) channel = 'r';
     }
     var type = WL.quiz.chooseType(word, channel, cfg.activeTypes);
-    var q = WL.quiz.build(word, type, curBook().words);
-    if (!q) {
-      q = WL.quiz.build(word, 'en2cn', curBook().words);
-    }
+    var q = WL.quiz.build(word, type, curBook().words) ||
+      WL.quiz.build(word, 'en2cn', curBook().words);
     s.q = q;
-    s.answered = null;
 
-    if (type === 'audio2cn') {
-      WL.quiz.speak(word.w, cfg.sound);
-    }
+    if (type === 'audio2cn') WL.quiz.speak(word.w, cfg.sound);
   }
 
+  // 答对：只让选项变绿，随即进入下一题，不再追加任何反馈条
   function answer(idx) {
     var s = S.session;
-    if (!s || s.answered) return;
-    var q = s.q;
-    if (!q) return;
-    var picked = q.options[idx];
+    if (!s || s.answered || !s.q) return;
+    var picked = s.q.options[idx];
+    if (!picked) return;
     var ok = !!picked.ok;
     s.answered = { idx: idx, ok: ok };
     grade(ok);
     render();
     if (ok) {
       setTimeout(function () {
-        if (S.session === s && s.answered && s.answered.ok) advance();
-      }, 620);
+        if (S.session === s && s.answered && s.answered.ok) advanceCorrect();
+      }, 420);
+    } else {
+      setTimeout(function () {
+        if (S.session === s && s.answered && !s.answered.ok) enterRetry();
+      }, 720);
     }
   }
 
@@ -193,8 +224,12 @@ window.WL = window.WL || {};
     render();
     if (ok) {
       setTimeout(function () {
-        if (S.session === s && s.answered && s.answered.ok) advance();
-      }, 620);
+        if (S.session === s && s.answered && s.answered.ok) advanceCorrect();
+      }, 420);
+    } else {
+      setTimeout(function () {
+        if (S.session === s && s.answered && !s.answered.ok) enterRetry();
+      }, 720);
     }
   }
 
@@ -231,24 +266,45 @@ window.WL = window.WL || {};
     WL.store.flush();
   }
 
-  function advance() {
+  function advanceCorrect() {
     var s = S.session;
     if (!s) return;
+    s.i++;
+    s.q = null;
+    s.answered = null;
+    if (s.i >= s.items.length) {
+      WL.store.bumpLog('ms', Date.now() - s.t0);
+      render();
+      return;
+    }
+    prepare();
+    render();
+  }
+
+  // 答错：先停在该词的介绍页，看完再回队列，该词稍后重考
+  function enterRetry() {
+    var s = S.session;
+    if (!s) return;
+    s.retryCard = true;
+    s.answered = null;
+    render();
+  }
+
+  function leaveRetry() {
+    var s = S.session;
     var cur = currentItem();
     if (!cur) return;
+    var retry = cur.retry || 0;
+    s.retryCard = false;
 
-    var wasWrong = s.answered && !s.answered.ok;
-
-    if (wasWrong && cur.retry < 2) {
-      var copy = { wid: cur.wid, from: cur.from, stage: 'show', retry: cur.retry + 1 };
-      var at = Math.min(s.items.length, s.i + 2);
+    if (retry < 2) {
+      var copy = { wid: cur.wid, from: cur.from, retry: retry + 1 };
+      var at = Math.min(s.items.length, s.i + 3);
       s.items.splice(at, 0, copy);
     }
-
     s.i++;
-    s.answered = null;
     s.q = null;
-    S.flash = null;
+    s.answered = null;
 
     if (s.i >= s.items.length) {
       WL.store.bumpLog('ms', Date.now() - s.t0);
@@ -268,6 +324,7 @@ window.WL = window.WL || {};
 
     var body;
     if (S.view === 'study') body = viewStudy();
+    else if (S.view === 'learn') body = viewLearn();
     else if (S.view === 'books') body = viewBooks();
     else if (S.view === 'stats') body = viewStats();
     else if (S.view === 'settings') body = viewSettings();
@@ -295,7 +352,7 @@ window.WL = window.WL || {};
       ['settings', '设置']
     ];
     defs.forEach(function (d) {
-      var b = el('button', 'tab' + (S.view === d[0] || (d[0] === 'home' && S.view === 'study') ? ' on' : ''), d[1]);
+      var b = el('button', 'tab' + (S.view === d[0] || (d[0] === 'home' && (S.view === 'study' || S.view === 'learn')) ? ' on' : ''), d[1]);
       b.onclick = function () {
         S.view = d[0];
         render();
@@ -389,17 +446,12 @@ window.WL = window.WL || {};
     if (!word) { s.i++; return viewStudy(); }
 
     var wrap = el('div', 'stack');
-
     var total = s.total || s.items.length;
     var doneN = Math.min(s.i, total);
+
     var top = el('div', 'study-top');
-    var left = el('div');
-    var kind = cur.from === 'new' ? '新学' : '复习';
-    left.textContent = kind + ' · 第 ' + (doneN + 1) + ' / ' + total + ' 项';
-    top.appendChild(left);
-    var rightTxt = el('div');
-    rightTxt.textContent = '对 ' + s.right + ' · 错 ' + s.wrong;
-    top.appendChild(rightTxt);
+    top.appendChild(el('div', null, (s.retryCard ? '回顾' : '测试') + ' · ' + (doneN + 1) + ' / ' + total));
+    top.appendChild(el('div', null, '对 ' + s.right + ' · 错 ' + s.wrong));
     wrap.appendChild(top);
 
     var bar = el('div', 'bar');
@@ -409,22 +461,65 @@ window.WL = window.WL || {};
     bar.appendChild(fill);
     wrap.appendChild(bar);
 
-    if (cur.stage === 'show') {
-      wrap.appendChild(learnCard(word));
+    if (s.retryCard) {
+      wrap.appendChild(learnCard(word, '看懂了，继续', leaveRetry));
     } else {
-      wrap.appendChild(questionCard(word, cur));
+      wrap.appendChild(questionCard(word));
     }
     return wrap;
   }
 
-  function learnCard(word) {
+  // 学习阶段：先把这一批新词逐张看完，不夹题
+  function viewLearn() {
+    var s = S.session;
+    if (!s) { S.view = 'home'; return viewHome(); }
+    if (s.li >= s.learn.length) {
+      buildTestQueue();
+      S.view = 'study';
+      return viewStudy();
+    }
+
+    var wid = s.learn[s.li];
+    var word = wordOf(wid);
+    if (!word) { s.li++; return viewLearn(); }
+
+    var total = s.learn.length;
+    var last = s.li >= total - 1;
+
+    var wrap = el('div', 'stack');
+    var top = el('div', 'study-top');
+    top.appendChild(el('div', null, '先过一遍 · ' + (s.li + 1) + ' / ' + total));
+    top.appendChild(el('div', null, '看完这批再统一测'));
+    wrap.appendChild(top);
+
+    var bar = el('div', 'bar');
+    bar.style.marginBottom = '14px';
+    var fill = el('i');
+    fill.style.width = (s.li / total * 100).toFixed(1) + '%';
+    bar.appendChild(fill);
+    wrap.appendChild(bar);
+
+    wrap.appendChild(learnCard(word, last ? '开始测试' : '下一个', function () {
+      markLearned(wid, word);
+      if (last) {
+        buildTestQueue();
+        S.view = 'study';
+      } else {
+        s.li++;
+      }
+      render();
+    }));
+    return wrap;
+  }
+
+  function learnCard(word, btnText, onClick) {
     var cfg = WL.store.getConfig();
+    var s = S.session;
     var card = el('div', 'qcard learn-body');
-    var w = el('div', 'learn-word', word.w);
-    card.appendChild(w);
+    card.appendChild(el('div', 'learn-word', word.w));
 
     var phRow = el('div', 'learn-ph');
-    if (word.ph) phRow.textContent = word.ph;
+    if (word.ph) phRow.appendChild(el('span', null, word.ph));
     if (cfg.sound) {
       var sp = el('button', 'speak');
       sp.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
@@ -441,31 +536,13 @@ window.WL = window.WL || {};
     }
     card.appendChild(def);
 
-    var btn = el('button', 'btn primary block lg', '记住了，测一下');
-    btn.style.marginTop = '24px';
-    btn.onclick = function () {
-      var cur = currentItem();
-      if (!cur) return;
-      var s = S.session;
-      var prog = WL.store.getProgress(s.bookId);
-      if (!prog[cur.wid]) {
-        var st = WL.srs.newState(word, Date.now());
-        st.seen = 0;
-        WL.store.putProgress(s.bookId, cur.wid, st);
-        WL.store.flush();
-        if (!s.newDone[cur.wid]) {
-          s.newDone[cur.wid] = 1;
-          WL.store.bumpLog('nw');
-        }
-      }
-      cur.stage = 'test';
-      prepare();
-      render();
-    };
+    var btn = el('button', 'btn primary block lg', btnText || '下一个');
+    btn.style.marginTop = '26px';
+    btn.onclick = onClick;
     card.appendChild(btn);
 
-    if (WL.quiz.speak && cfg.sound && S.session.spokenFor !== S.session.i) {
-      S.session.spokenFor = S.session.i;
+    if (cfg.sound && s && s.spokenFor !== word.id) {
+      s.spokenFor = word.id;
       WL.quiz.speak(word.w, true);
     }
     return card;
@@ -547,7 +624,7 @@ window.WL = window.WL || {};
       } else {
         setTimeout(function () { if (document.body.contains(input)) input.focus(); }, 30);
       }
-      card.appendChild(feedbackBar(word, q));
+      card.appendChild(qFoot());
       return card;
     }
 
@@ -569,32 +646,14 @@ window.WL = window.WL || {};
     });
     card.appendChild(opts);
 
-    card.appendChild(feedbackBar(word, q));
+    card.appendChild(qFoot());
     return card;
   }
 
-  function feedbackBar(word) {
-    var s = S.session;
-    if (!s.answered) {
-      var hintRow = el('div');
-      hintRow.style.cssText = 'margin-top:16px;font-size:12px;color:#948F83;text-align:center';
-      hintRow.textContent = '按数字键选择，回车继续';
-      return hintRow;
-    }
-    var f = el('div', 'feedback ' + (s.answered.ok ? 'right' : 'wrong'));
-    var txt = el('div');
-    if (s.answered.ok) {
-      txt.textContent = '答对了';
-    } else {
-      txt.innerHTML = '正确答案：<b>' + (s.q ? s.q.answer : '') + '</b>';
-    }
-    f.appendChild(txt);
-
-    var btn = el('button', 'btn ghost');
-    btn.style.cssText = 'color:inherit;border-color:currentColor;padding:5px 12px;font-size:13px';
-    btn.textContent = '继续 →';
-    btn.onclick = advance;
-    f.appendChild(btn);
+  // 固定高度的一行提示，作答前后都不变，避免卡片高度抖动
+  function qFoot() {
+    var f = el('div', 'qfoot');
+    f.textContent = '按数字键 1–4 选择';
     return f;
   }
 
@@ -942,7 +1001,7 @@ window.WL = window.WL || {};
       var cell = el('i');
       if (v2 > 0) {
         var alpha = 0.22 + 0.78 * Math.min(1, v2 / maxV);
-        cell.style.background = 'rgba(46, 92, 78, ' + alpha.toFixed(2) + ')';
+        cell.style.background = 'rgba(47, 110, 212, ' + alpha.toFixed(2) + ')';
         cell.style.boxShadow = 'none';
       }
       cell.title = k2 + (v2 ? ' · ' + v2 + ' 词' : ' · 未学');
@@ -1102,19 +1161,30 @@ window.WL = window.WL || {};
   /* ============ 事件 ============ */
 
   document.addEventListener('keydown', function (e) {
-    if (S.view !== 'study') return;
     var s = S.session;
     if (!s) return;
+
+    if (S.view === 'learn') {
+      var lw = wordOf(s.learn[s.li]);
+      if (!lw) return;
+      if (e.key === ' ' && WL.store.getConfig().sound) {
+        e.preventDefault();
+        WL.quiz.speak(lw.w, true);
+      }
+      return;
+    }
+    if (S.view !== 'study') return;
+
     var cur = currentItem();
     if (!cur) return;
 
     if (e.key === 'Enter') {
-      if (s.answered) { e.preventDefault(); advance(); }
+      if (s.retryCard) { e.preventDefault(); leaveRetry(); return; }
+      if (s.answered && !s.answered.ok) { e.preventDefault(); enterRetry(); return; }
       return;
     }
-    if (cur.stage === 'show') {
-      var cfg = WL.store.getConfig();
-      if (e.key === ' ' && cfg.sound) {
+    if (s.retryCard) {
+      if (e.key === ' ' && WL.store.getConfig().sound) {
         e.preventDefault();
         WL.quiz.speak(wordOf(cur.wid).w, true);
       }

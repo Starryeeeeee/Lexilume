@@ -6,8 +6,8 @@
   --ink: #33363B;
   --ink-2: #5E6470;
   --ink-3: #8B92A0;
-  --accent: #6D5DFC;
-  --accent-deep: #5546DB;
+  --accent: #2F6ED4;
+  --accent-deep: #1F55A8;
   --right: #3E8E6E;
   --wrong: #C75A50;
 
@@ -159,14 +159,14 @@ h2.section {
 .btn.primary {
   background: var(--accent);
   color: #fff;
-  box-shadow: 5px 5px 12px rgba(109, 93, 252, 0.36), -5px -5px 12px var(--sh-light);
+  box-shadow: 4px 4px 10px rgba(96, 108, 128, 0.32), -3px -3px 8px var(--sh-light);
 }
 .btn.primary:hover {
   background: var(--accent-deep);
-  box-shadow: 3px 3px 7px rgba(109, 93, 252, 0.34), -3px -3px 7px var(--sh-light);
+  box-shadow: 2px 2px 5px rgba(96, 108, 128, 0.3), -2px -2px 5px var(--sh-light);
 }
 .btn.primary:active {
-  box-shadow: inset 4px 4px 9px rgba(60, 48, 190, 0.5), inset -2px -2px 6px rgba(255, 255, 255, 0.18);
+  box-shadow: inset 3px 3px 8px rgba(18, 48, 105, 0.45), inset -2px -2px 6px rgba(255, 255, 255, 0.16);
 }
 .btn.ghost { box-shadow: var(--raise-xs); color: var(--ink-3); }
 .btn.ghost:hover { box-shadow: none; color: var(--ink-2); }
@@ -360,6 +360,16 @@ h2.section {
 .feedback.right { color: #22664E; }
 .feedback.wrong { color: #94403A; }
 .feedback b { font-weight: 600; }
+
+.qfoot {
+  margin-top: 20px;
+  height: 18px;
+  line-height: 18px;
+  font-size: 12px;
+  color: var(--ink-3);
+  text-align: center;
+  letter-spacing: 0.04em;
+}
 
 /* ---------- 词表 ---------- */
 .book-list { display: grid; gap: 14px; }
