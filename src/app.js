@@ -1523,7 +1523,10 @@ window.WL = window.WL || {};
 
     var c2 = el('div', 'card');
     c2.appendChild(el('h2', 'section', '未来 30 天复习量'));
-    var fc = WL.srs.forecast(prog, now, 30, chs);
+    var cfgF = WL.store.getConfig();
+    var freshWords = book.words.filter(function (w) { return !prog[w.id]; });
+    var extraDues = WL.srs.simulateNewLearn(freshWords, now, 30, cfgF.newLimit);
+    var fc = WL.srs.forecast(prog, now, 30, chs, extraDues);
     var maxV = Math.max.apply(null, fc.concat([1]));
     var bars = el('div', 'bars');
     fc.forEach(function (v, i) {
@@ -1541,6 +1544,7 @@ window.WL = window.WL || {};
     var tomorrow = fc[1] || 0;
     c2.appendChild(h('<div class="small muted" style="margin-top:10px">明天预计 ' + tomorrow + ' 张，日均 ' +
       Math.round(fc.reduce(function (a, b) { return a + b; }, 0) / 30) + ' 张</div>'));
+    c2.appendChild(h('<div class="small muted" style="margin-top:6px">已含假设：从明天起每天继续新学 ' + cfgF.newLimit + ' 个；实际随你的作答浮动。</div>'));
     wrap.appendChild(c2);
 
     var c3 = el('div', 'card');

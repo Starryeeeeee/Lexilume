@@ -135,7 +135,8 @@ window.WL = window.WL || {};
   }
 
   // 复习量预测：未来 n 天每天到期的卡片数（已斩的词不计入）
-  function forecast(states, now, days, channels) {
+  // extraDues：额外到期时间戳数组（如「假设继续新学」的模拟结果），并入统计
+  function forecast(states, now, days, channels, extraDues) {
     channels = channels || ['r', 'p'];
     var out = [];
     for (var i = 0; i < days; i++) out.push(0);
@@ -150,7 +151,34 @@ window.WL = window.WL || {};
         if (idx < days) out[idx]++;
       }
     }
+    var extra = extraDues || [];
+    for (var m = 0; m < extra.length; m++) {
+      var eIdx = Math.floor((extra[m] - now) / DAY);
+      if (eIdx < 0) eIdx = 0;
+      if (eIdx < days) out[eIdx]++;
+    }
     return out;
+  }
+
+  // 假设性模拟：从明天起每天学 perDay 个新词（按传入顺序），推演这些词
+  // 未来 days 天内的全部到期时间（假设每次复习都答对），供预测叠加
+  function simulateNewLearn(words, now, days, perDay) {
+    perDay = perDay || 10;
+    var dues = [];
+    var horizon = now + days * DAY;
+    for (var i = 0; i < words.length; i++) {
+      var learnDay = now + (Math.floor(i / perDay) + 1) * DAY;
+      if (learnDay >= horizon) break; // words 需按学习顺序传入
+      var st = newState(words[i], learnDay);
+      var t = learnDay;
+      var guard = 0;
+      while (t < horizon && guard++ < 12) {
+        review(st, 'r', true, t);
+        t = st.ch.r.due;
+        if (t < horizon) dues.push(t);
+      }
+    }
+    return dues;
   }
 
   WL.srs = {
@@ -164,6 +192,7 @@ window.WL = window.WL || {};
     healthOf: healthOf,
     dueNow: dueNow,
     overdueDays: overdueDays,
-    forecast: forecast
+    forecast: forecast,
+    simulateNewLearn: simulateNewLearn
   };
 })(window.WL);

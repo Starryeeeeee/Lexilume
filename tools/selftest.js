@@ -207,5 +207,15 @@ ok('同日日志按字段取较大值（不相加）', ml['2026-01-01'].nw === 2
 const md = m.mergeData({ books: { a: { w1: sa } }, log: {} }, { books: { b: { w9: sb } }, log: {} });
 ok('合并按词书取并集', Object.keys(md.books).length === 2 && Object.keys(md.books.a).length === 1 && Object.keys(md.books.b).length === 1);
 
+console.log('\n[13] 新学模拟与预测整合');
+const fw = [gk.words[0], gk.words[1], gk.words[2]];
+const nowS = 100 * DAY;
+const dues = WL.srs.simulateNewLearn(fw, nowS, 30, 1);
+ok('模拟 3 词产生充足到期序列', dues.length >= 9, 'dues=' + dues.length);
+ok('模拟到期都落在窗口内且晚于学习日', dues.every(function (d) { return d > nowS && d < nowS + 30 * DAY; }));
+const fcS = WL.srs.forecast({}, nowS, 30, ['r'], dues);
+ok('模拟到期并入预测总量', fcS.reduce(function (a, b) { return a + b; }, 0) === dues.length, JSON.stringify(fcS));
+ok('学习从明天开始，今天桶为空', (fcS[0] || 0) === 0, 'fcS[0]=' + fcS[0]);
+
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败\n');
 process.exit(fail ? 1 : 0);
