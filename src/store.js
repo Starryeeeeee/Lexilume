@@ -10,13 +10,13 @@ window.WL = window.WL || {};
   };
 
   var DEFAULT_CONFIG = {
-    cfgVersion: 2,
+    cfgVersion: 3,
     book: 'gk',
     newLimit: 20,
     reviewLimit: 60,
     sound: true,
     shuffleNew: false,
-    activeTypes: ['en2cn']
+    activeTypes: ['en2cn', 'cn2en']
   };
 
   var cache = {};
@@ -45,11 +45,14 @@ window.WL = window.WL || {};
   function getConfig() {
     if (!cache.config) {
       var c = Object.assign({}, DEFAULT_CONFIG, readJSON(K.config, {}));
-      if ((c.cfgVersion || 1) < 2) {
-        c.cfgVersion = 2;
-        c.activeTypes = ['en2cn'];
+      if ((c.cfgVersion || 1) < 3) {
+        // v3：启用「看义选词」，与基底题型构成默认题型组
+        c.cfgVersion = 3;
+        c.activeTypes = ['en2cn', 'cn2en'];
         writeJSON(K.config, c);
       }
+      if (!c.activeTypes || !c.activeTypes.length) c.activeTypes = ['en2cn'];
+      if (c.activeTypes.indexOf('en2cn') < 0) c.activeTypes.unshift('en2cn');
       cache.config = c;
     }
     return cache.config;

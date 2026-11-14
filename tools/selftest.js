@@ -109,5 +109,36 @@ ok('单词都有音标', noPh === 0, noPh + ' 条缺音标');
 ok('所有词条都有例句', noEx === 0, noEx + ' 条缺例句');
 console.log('    词库合计 ' + WL.books.reduce(function (a, b) { return a + b.words.length; }, 0) + ' 词');
 
+console.log('\n[9] 看义选词与拼写环节');
+bad = 0; checked = 0;
+gk.words.forEach(function (w) {
+  const q = WL.quiz.build(w, 'cn2en', gk.words);
+  if (!q) { bad++; return; }
+  checked++;
+  const correct = q.options.filter(function (o) { return o.ok; }).length;
+  const texts = q.options.map(function (o) { return o.text; });
+  const uniq = new Set(texts).size;
+  if (correct !== 1 || q.options.length !== 4 || uniq !== 4 || q.channel !== 'p') {
+    bad++;
+    console.log('    问题词:', w.w, '选项数', q.options.length, '正确数', correct, '通道', q.channel);
+  }
+});
+ok('全部 ' + checked + ' 个词都能生成看义选词 4 选 1', bad === 0, bad + ' 个异常');
+
+let spellableN = 0, spellBad = 0;
+gk.words.forEach(function (w) {
+  if (!WL.quiz.spellable(w)) return;
+  spellableN++;
+  const q = WL.quiz.build(w, 'spell', gk.words);
+  if (!q || q.answer !== w.w || q.channel !== 'p' || q.hint[0] !== w.w[0]) spellBad++;
+});
+ok('拼写环节覆盖 ' + spellableN + '/' + gk.words.length + ' 词且题目完整', spellBad === 0, spellBad + ' 个异常');
+ok('spellable 与 build("spell") 前提一致', gk.words.every(function (w) {
+  return WL.quiz.spellable(w) === !!WL.quiz.build(w, 'spell', gk.words);
+}));
+
+const t2 = WL.quiz.chooseType(word, 'p', ['en2cn', 'cn2en']);
+ok('产出通道路由到看义选词', t2 === 'cn2en', t2);
+
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败\n');
 process.exit(fail ? 1 : 0);

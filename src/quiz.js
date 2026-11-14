@@ -63,6 +63,11 @@ window.WL = window.WL || {};
     return sentence.replace(re, '____');
   }
 
+  // 该词是否适合拼写环节（与 build('spell') 的前提保持一致）
+  function spellable(word) {
+    return /^[a-z]+$/i.test(word.w) && word.w.length <= 20;
+  }
+
   // 返回题目结构；若该词不适合该题型则返回 null
   function build(word, type, pool) {
     var answer, options = [], prompt, sub = '', hint = '';
@@ -91,7 +96,7 @@ window.WL = window.WL || {};
       sub = word.exCn || '';
       options = [answer].concat(pickDistractors(word, pool, 3, 'w'));
     } else if (type === 'spell') {
-      if (!/^[a-z]+$/i.test(word.w) || word.w.length > 20) return null;
+      if (!spellable(word)) return null;
       answer = word.w;
       prompt = firstSense(word.tr);
       sub = word.pos ? '(' + word.pos + ')' : '';
@@ -100,11 +105,14 @@ window.WL = window.WL || {};
       return null;
     }
 
-    var opts = shuffle(options).map(function (t) {
-      return { text: t, ok: t === answer };
-    });
-
-    if (opts.length < 2) return null;
+    // 拼写题没有选项，靠输入作答，跳过选项检查
+    var opts = [];
+    if (type !== 'spell') {
+      opts = shuffle(options).map(function (t) {
+        return { text: t, ok: t === answer };
+      });
+      if (opts.length < 2) return null;
+    }
 
     return {
       type: type,
@@ -155,6 +163,7 @@ window.WL = window.WL || {};
     speak: speak,
     normalize: normalize,
     shuffle: shuffle,
-    blankOut: blankOut
+    blankOut: blankOut,
+    spellable: spellable
   };
 })(window.WL);

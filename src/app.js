@@ -100,10 +100,11 @@ window.WL = window.WL || {};
     }
 
     S.session = {
-      phase: fresh.length ? 'learn' : 'test',
+      phase: 'review',
       learn: fresh.map(function (w) { return w.id; }),
       li: 0,
       reviewWids: due.map(function (x) { return x.w.id; }),
+      spellQueue: [],
       items: [],
       i: 0,
       total: 0,
@@ -116,33 +117,115 @@ window.WL = window.WL || {};
       revDone: {},
       spokenFor: '',
       right: 0,
-      wrong: 0
+      wrong: 0,
+      ended: false
     };
 
-    if (S.session.phase === 'learn') {
-      S.view = 'learn';
-    } else {
-      buildTestQueue();
-      S.view = 'study';
-    }
+    if (due.length) enterReviewPhase();
+    else enterLearnPhase();
+  }
+
+  /* ----- 会话阶段机：复习 → 学一个测一个 → 拼写环节 ----- */
+
+  function enterReviewPhase() {
+    var s = S.session;
+    s.phase = 'review';
+    s.items = s.reviewWids.map(function (id) { return { wid: id, from: 'review', retry: 0 }; });
+    s.i = 0;
+    s.total = s.items.length;
+    s.q = null;
+    s.answered = null;
+    S.view = 'study';
+    prepare();
     render();
   }
 
-  // 学习阶段走完，统一组卷：先复习后新学
-  function buildTestQueue() {
+  function enterLearnPhase() {
     var s = S.session;
-    var items = [];
-    s.reviewWids.forEach(function (id) {
-      items.push({ wid: id, from: 'review', retry: 0 });
-    });
-    s.learn.forEach(function (id) {
-      items.push({ wid: id, from: 'new', retry: 0 });
-    });
-    s.items = items;
+    s.phase = 'learn';
+    s.items = [];
     s.i = 0;
-    s.total = items.length;
-    s.phase = 'test';
+    s.q = null;
+    s.answered = null;
+    S.view = 'learn';
+    render();
+  }
+
+  // 词卡看完，立刻测这个词（百词斩式：学一个测一个）
+  function advanceFromCard() {
+    var s = S.session;
+    var wid = s.learn[s.li];
+    var word = wordOf(wid);
+    if (!word) { s.li++; nextFromLearn(); return; }
+    markLearned(wid, word);
+    s.phase = 'quiz';
+    s.items = [{ wid: wid, from: 'new', retry: 0 }];
+    s.i = 0;
+    s.total = s.items.length;
+    s.q = null;
+    s.answered = null;
+    S.view = 'study';
     prepare();
+    render();
+  }
+
+  function nextFromLearn() {
+    var s = S.session;
+    if (s.li < s.learn.length) enterLearnPhase();
+    else enterSpellAsk();
+  }
+
+  function enterSpellAsk() {
+    var s = S.session;
+    s.spellQueue = Object.keys(s.newDone).filter(function (id) {
+      var w = wordOf(id);
+      return w && WL.quiz.spellable(w);
+    });
+    if (!s.spellQueue.length) { finishSession(); return; }
+    s.phase = 'spellask';
+    S.view = 'spellask';
+    render();
+  }
+
+  function startSpell() {
+    var s = S.session;
+    s.phase = 'spell';
+    s.items = s.spellQueue.map(function (id) { return { wid: id, from: 'spell', retry: 0 }; });
+    s.i = 0;
+    s.total = s.items.length;
+    s.q = null;
+    s.answered = null;
+    S.view = 'study';
+    prepare();
+    render();
+  }
+
+  function finishSession() {
+    var s = S.session;
+    if (!s) return;
+    if (!s.ended) {
+      s.ended = true;
+      WL.store.bumpLog('ms', Date.now() - s.t0);
+    }
+    s.phase = 'done';
+    S.view = 'study';
+    render();
+  }
+
+  // 一段队列走完之后去哪，由当前阶段决定
+  function queueDrained() {
+    var s = S.session;
+    if (s.phase === 'review') {
+      if (s.learn.length) enterLearnPhase();
+      else enterSpellAsk();
+    } else if (s.phase === 'quiz') {
+      s.li++;
+      nextFromLearn();
+    } else if (s.phase === 'spell') {
+      finishSession();
+    } else {
+      finishSession();
+    }
   }
 
   function markLearned(wid, word) {
@@ -180,13 +263,22 @@ window.WL = window.WL || {};
     var st = prog[cur.wid];
     var now = Date.now();
     var channel = 'r';
+    var type;
 
-    if (cur.from === 'review' && st) {
+    if (cur.from === 'spell') {
+      type = 'spell';
+    } else if (cur.from === 'new') {
+      // 新词的即时巩固题在已启用题型里随机，保持新鲜感
+      var at = cfg.activeTypes && cfg.activeTypes.length ? cfg.activeTypes : ['en2cn'];
+      type = at[Math.floor(Math.random() * at.length)];
+    } else if (cur.from === 'review' && st) {
       var chs = activeChannels();
       channel = WL.srs.weakestChannel(st, now, chs);
       if (chs.indexOf(channel) < 0) channel = 'r';
+      type = WL.quiz.chooseType(word, channel, cfg.activeTypes);
+    } else {
+      type = WL.quiz.chooseType(word, 'r', cfg.activeTypes);
     }
-    var type = WL.quiz.chooseType(word, channel, cfg.activeTypes);
     var q = WL.quiz.build(word, type, curBook().words) ||
       WL.quiz.build(word, 'en2cn', curBook().words);
     s.q = q;
@@ -274,8 +366,7 @@ window.WL = window.WL || {};
     s.q = null;
     s.answered = null;
     if (s.i >= s.items.length) {
-      WL.store.bumpLog('ms', Date.now() - s.t0);
-      render();
+      queueDrained();
       return;
     }
     prepare();
@@ -308,8 +399,7 @@ window.WL = window.WL || {};
     s.answered = null;
 
     if (s.i >= s.items.length) {
-      WL.store.bumpLog('ms', Date.now() - s.t0);
-      render();
+      queueDrained();
       return;
     }
     prepare();
@@ -327,6 +417,7 @@ window.WL = window.WL || {};
     var body;
     if (S.view === 'study') body = viewStudy();
     else if (S.view === 'learn') body = viewLearn();
+    else if (S.view === 'spellask') body = viewSpellAsk();
     else if (S.view === 'books') body = viewBooks();
     else if (S.view === 'stats') body = viewStats();
     else if (S.view === 'settings') body = viewSettings();
@@ -354,7 +445,7 @@ window.WL = window.WL || {};
       ['settings', '设置']
     ];
     defs.forEach(function (d) {
-      var b = el('button', 'tab' + (S.view === d[0] || (d[0] === 'home' && (S.view === 'study' || S.view === 'learn')) ? ' on' : ''), d[1]);
+      var b = el('button', 'tab' + (S.view === d[0] || (d[0] === 'home' && (S.view === 'study' || S.view === 'learn' || S.view === 'spellask')) ? ' on' : ''), d[1]);
       b.onclick = function () {
         S.view = d[0];
         render();
@@ -446,7 +537,7 @@ window.WL = window.WL || {};
       '<div class="small" style="margin-top:8px;line-height:1.85">' +
       '预览窗口和一些嵌入环境会把浏览器的存储隔离成一次性的，关掉就清空。换下面任意一种方式打开就能正常记录：<br>' +
       '① 双击文件夹里的 <code>index.html</code>，数据存在本机浏览器，断网也照常<br>' +
-      '② 部署之后用网址打开，例如 <code>https://用户名.github.io/cile/</code><br>' +
+      '② 部署之后用网址打开，例如 <code>https://starryeeeeee.github.io/wordbeat/</code><br>' +
       '③ 只想临时留存，去「设置 → 导出备份」存一个 JSON，换环境再导回来' +
       '</div>';
     return d;
@@ -465,15 +556,29 @@ window.WL = window.WL || {};
     var total = s.total || s.items.length;
     var doneN = Math.min(s.i, total);
 
+    var stage = s.retryCard ? '回顾'
+      : s.phase === 'spell' ? '拼写'
+      : s.phase === 'quiz' ? '新学' : '复习';
+    var where;
+    if (s.phase === 'quiz') {
+      where = '第 ' + (s.li + 1) + ' / ' + s.learn.length + ' 词';
+    } else {
+      where = (doneN + 1) + ' / ' + total;
+    }
+
     var top = el('div', 'study-top');
-    top.appendChild(el('div', null, (s.retryCard ? '回顾' : '测试') + ' · ' + (doneN + 1) + ' / ' + total));
+    top.appendChild(el('div', null, stage + ' · ' + where));
     top.appendChild(el('div', null, '对 ' + s.right + ' · 错 ' + s.wrong));
     wrap.appendChild(top);
 
     var bar = el('div', 'bar');
     bar.style.marginBottom = '14px';
     var fill = el('i');
-    fill.style.width = (doneN / total * 100).toFixed(1) + '%';
+    if (s.phase === 'quiz') {
+      fill.style.width = (s.li / Math.max(1, s.learn.length) * 100).toFixed(1) + '%';
+    } else {
+      fill.style.width = (doneN / total * 100).toFixed(1) + '%';
+    }
     bar.appendChild(fill);
     wrap.appendChild(bar);
 
@@ -482,17 +587,24 @@ window.WL = window.WL || {};
     } else {
       wrap.appendChild(questionCard(word));
     }
+
+    if (s.phase === 'spell' && !s.retryCard) {
+      var skip = el('button', 'btn ghost block');
+      skip.textContent = '跳过剩余拼写，结束本轮';
+      skip.style.marginTop = '4px';
+      skip.onclick = finishSession;
+      wrap.appendChild(skip);
+    }
     return wrap;
   }
 
-  // 学习阶段：先把这一批新词逐张看完，不夹题
+  // 新学阶段：每张词卡看完立刻测这个词
   function viewLearn() {
     var s = S.session;
     if (!s) { S.view = 'home'; return viewHome(); }
     if (s.li >= s.learn.length) {
-      buildTestQueue();
-      S.view = 'study';
-      return viewStudy();
+      enterSpellAsk();
+      return viewSpellAsk();
     }
 
     var wid = s.learn[s.li];
@@ -500,12 +612,11 @@ window.WL = window.WL || {};
     if (!word) { s.li++; return viewLearn(); }
 
     var total = s.learn.length;
-    var last = s.li >= total - 1;
 
     var wrap = el('div', 'stack');
     var top = el('div', 'study-top');
-    top.appendChild(el('div', null, '先过一遍 · ' + (s.li + 1) + ' / ' + total));
-    top.appendChild(el('div', null, '看完这批再统一测'));
+    top.appendChild(el('div', null, '新学 · 第 ' + (s.li + 1) + ' / ' + total + ' 词'));
+    top.appendChild(el('div', null, '看完立刻测这个词'));
     wrap.appendChild(top);
 
     var bar = el('div', 'bar');
@@ -515,16 +626,37 @@ window.WL = window.WL || {};
     bar.appendChild(fill);
     wrap.appendChild(bar);
 
-    wrap.appendChild(learnCard(word, last ? '开始测试' : '下一个', function () {
-      markLearned(wid, word);
-      if (last) {
-        buildTestQueue();
-        S.view = 'study';
-      } else {
-        s.li++;
-      }
-      render();
+    wrap.appendChild(learnCard(word, '看懂了，测试', function () {
+      // li 仍指向当前这张卡；advanceFromCard 学完这个词，测完由 queueDrained 里 li++
+      advanceFromCard();
     }));
+    return wrap;
+  }
+
+  // 拼写环节前的选择页：继续拼写或者跳过
+  function viewSpellAsk() {
+    var s = S.session;
+    if (!s) { S.view = 'home'; return viewHome(); }
+    var n = s.spellQueue.length;
+
+    var wrap = el('div', 'stack');
+    var card = el('div', 'card');
+    card.style.textAlign = 'center';
+    card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">本轮新学完成</div>'));
+    card.appendChild(h('<div class="muted small">新学了 ' + Object.keys(s.newDone).length +
+      ' 个词。拼写是最牢固的巩固方式，也可以跳过直接结束。</div>'));
+
+    var go = el('button', 'btn primary block lg', '开始拼写（' + n + ' 词）');
+    go.style.marginTop = '20px';
+    go.onclick = startSpell;
+    card.appendChild(go);
+
+    var skip = el('button', 'btn ghost block', '跳过拼写，结束本轮');
+    skip.style.marginTop = '8px';
+    skip.onclick = finishSession;
+    card.appendChild(skip);
+
+    wrap.appendChild(card);
     return wrap;
   }
 
@@ -640,7 +772,7 @@ window.WL = window.WL || {};
       } else {
         setTimeout(function () { if (document.body.contains(input)) input.focus(); }, 30);
       }
-      card.appendChild(qFoot());
+      card.appendChild(qFoot('输入后回车确认'));
       return card;
     }
 
@@ -666,10 +798,11 @@ window.WL = window.WL || {};
     return card;
   }
 
+
   // 固定高度的一行提示，作答前后都不变，避免卡片高度抖动
-  function qFoot() {
+  function qFoot(text) {
     var f = el('div', 'qfoot');
-    f.textContent = '按数字键 1–4 选择';
+    f.textContent = text || '按数字键 1–4 选择';
     return f;
   }
 
@@ -1081,7 +1214,7 @@ window.WL = window.WL || {};
     card.appendChild(fTok);
 
     var row = el('div', 'row');
-    var bSave = el('button', 'btn primary', sy.configured ? '保存并同步' : '保存并同步');
+    var bSave = el('button', 'btn primary', '保存并同步');
     bSave.onclick = function () {
       var parts = iRepo.value.trim().split('/');
       if (parts.length !== 2 || !parts[0].trim() || !parts[1].trim()) {
@@ -1199,28 +1332,62 @@ window.WL = window.WL || {};
 
     var c2 = el('div', 'card');
     c2.appendChild(el('h2', 'section', '训练题型'));
-    var types = [
-      ['en2cn', '看词选义', true],
-      ['cn2en', '看义选词', false],
-      ['audio2cn', '听音辨义', false],
-      ['spell', '拼写', false],
-      ['cloze', '语境填词', false]
-    ];
-    types.forEach(function (t) {
+
+    // 基底题型：看词选义，始终启用
+    var baseRow = el('div', 'spread');
+    baseRow.style.padding = '11px 2px';
+    var baseLeft = el('div');
+    baseLeft.appendChild(el('div', null, '看词选义'));
+    baseLeft.appendChild(el('div', 'small muted', '基础题型，始终启用'));
+    baseRow.appendChild(baseLeft);
+    var baseTag = el('div', 'small', '已启用');
+    baseTag.style.color = 'var(--accent-deep)';
+    baseTag.style.fontWeight = '600';
+    baseRow.appendChild(baseTag);
+    c2.appendChild(baseRow);
+
+    // 可开关题型：目前只有看义选词，其余接口已留好
+    var togglable = [['cn2en', '看义选词', '答对率会一同计入调度，建议开启']];
+    togglable.forEach(function (t) {
       var row = el('div', 'spread');
       row.style.padding = '11px 2px';
-      if (!t[2]) row.style.opacity = '0.45';
+      row.style.marginTop = '4px';
       var left = el('div');
       left.appendChild(el('div', null, t[1]));
-      if (!t[2]) {
-        var sub = el('div', 'small muted', '待补充');
-        left.appendChild(sub);
-      }
+      left.appendChild(el('div', 'small muted', t[2]));
       row.appendChild(left);
-      var tag = el('div', 'small');
-      tag.style.color = t[2] ? 'var(--accent-deep)' : 'var(--ink-3)';
-      tag.style.fontWeight = t[2] ? '600' : '400';
-      tag.textContent = t[2] ? '已启用' : '—';
+      var sw = el('div', 'sw');
+      var isOn = (cfg.activeTypes || []).indexOf(t[0]) >= 0;
+      sw.classList.toggle('on', isOn);
+      sw.onclick = function () {
+        var cur = (WL.store.getConfig().activeTypes || ['en2cn']).slice();
+        var i = cur.indexOf(t[0]);
+        if (i >= 0) { cur.splice(i, 1); }
+        else { cur.push(t[0]); }
+        if (cur.indexOf('en2cn') < 0) cur.unshift('en2cn');
+        WL.store.setConfig({ activeTypes: cur });
+        sw.classList.toggle('on', cur.indexOf(t[0]) >= 0);
+        toast(cur.indexOf(t[0]) >= 0 ? '已启用「' + t[1] + '」' : '已关闭「' + t[1] + '」');
+      };
+      row.appendChild(sw);
+      c2.appendChild(row);
+    });
+
+    var pendTypes = [
+      ['听音辨义', '待补充'],
+      ['拼写', '作为出题题型待补充；学习结束后的拼写环节已可用'],
+      ['语境填词', '待补充']
+    ];
+    pendTypes.forEach(function (t) {
+      var row = el('div', 'spread');
+      row.style.padding = '11px 2px';
+      row.style.opacity = '0.45';
+      var left = el('div');
+      left.appendChild(el('div', null, t[0]));
+      left.appendChild(el('div', 'small muted', t[1]));
+      row.appendChild(left);
+      var tag = el('div', 'small', '—');
+      tag.style.color = 'var(--ink-3)';
       row.appendChild(tag);
       c2.appendChild(row);
     });
@@ -1300,8 +1467,8 @@ window.WL = window.WL || {};
       '<div class="small" style="color:#5E6470;line-height:1.9">' +
       '调度模型：每个词维护难度 D 与稳定度 S，保留率 R = 1/(1+t/9S)，按 90% 保留率反解下次复习时间。<br>' +
       '答错时稳定度缩水但不清零，避免难词被永久打回原点。<br>' +
-      '当前只启用「看词选义」，其余题型与拼写通道的接口已经预留。<br>' +
-      '数据保存在本机浏览器，不上传任何服务器。' +
+      '流程：复习到期词 → 新学（看一张卡立刻测一个）→ 拼写环节（可跳过）。<br>' +
+      '数据默认只存本机浏览器；配置跨设备同步后，学习进度会经 GitHub 仓库在设备间合并。' +
       '</div>'
     ));
     wrap.appendChild(c5);

@@ -136,6 +136,16 @@ window.WL = window.WL || {};
 
   /* ---------- 网络 ---------- */
 
+  // 仅用于比较：键排序后序列化，键序差异不当作内容变化
+  function stableStringify(x) {
+    if (x === null || typeof x !== 'object') return JSON.stringify(x);
+    if (Array.isArray(x)) return '[' + x.map(stableStringify).join(',') + ']';
+    var ks = Object.keys(x).sort();
+    return '{' + ks.map(function (k) {
+      return JSON.stringify(k) + ':' + stableStringify(x[k]);
+    }).join(',') + '}';
+  }
+
   function headers() {
     var c = load();
     return {
@@ -207,6 +217,16 @@ window.WL = window.WL || {};
 
       WL.store.importAll({ v: 1, books: merged.books, log: merged.log });
 
+      // 内容与远端一致就不再提交，避免每次打开页面都多一个空 commit
+      if (remote.data && stableStringify(remote.data) === stableStringify(merged)) {
+        var cSame = load();
+        cSame.lastSync = Date.now();
+        cSame.lastError = '';
+        save();
+        lastResult = { ok: true, msg: '已同步（内容无变化）' };
+        return lastResult;
+      }
+
       var payload = JSON.stringify({
         v: 1,
         updatedAt: Date.now(),
@@ -221,9 +241,11 @@ window.WL = window.WL || {};
           var again = await fetchRemote();
           var merged2 = mergeData(WL.store.exportAll(), again.data);
           WL.store.importAll({ v: 1, books: merged2.books, log: merged2.log });
-          await putRemote(JSON.stringify({
-            v: 1, updatedAt: Date.now(), books: merged2.books, log: merged2.log
-          }), again.sha);
+          if (again.data && stableStringify(again.data) !== stableStringify(merged2)) {
+            await putRemote(JSON.stringify({
+              v: 1, updatedAt: Date.now(), books: merged2.books, log: merged2.log
+            }), again.sha);
+          }
         } else {
           throw e;
         }

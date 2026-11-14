@@ -4,37 +4,41 @@
 
 ## 一、这是什么
 
-**词律 wordbeat** —— 一个可自行部署的单词学习网站，参考百词斩的学习机制，调度算法用的是简化版 FSRS。
+**词律 wordbeat** —— 一个可自行部署的单词学习网站，学习流程对标百词斩，调度算法用的是简化版 FSRS。
 
 - 纯静态、零构建、零依赖：没有 npm、没有框架、没有后端
 - 使用者目前只有一人（高二学生，家里和学校各一台电脑，都不会被还原）
 - 仓库规划名：`Starryeeeeee/wordbeat`，地址将是 `https://starryeeeeee.github.io/wordbeat/`
 
-## 二、当前状态（2026-11-14）
+## 二、当前状态（2026-11-14，第二版）
 
 **已完成且验证通过：**
 
 | 模块 | 状态 |
 |---|---|
-| 调度内核 srs.js | 完成。21 项单元自检全过 |
-| 学习流程 | 完成。先整批过词 → 统一测；答错退回词卡稍后重考 |
-| 题型 | 只启用「看词选义」，其余四种接口已留好，在设置里灰显 |
+| 调度内核 srs.js | 完成。25 项单元自检全过 |
+| 学习流程 | 完成。复习到期词 → 新学（看一张卡立刻测一个）→ 拼写环节（可跳过），浏览器端全流程实测通过 |
+| 题型 | 看词选义（基底）+ 看义选词（设置里可开关）；听音辨义 / 拼写 / 语境填词作为出题题型待补充，接口已留好 |
+| 拼写环节 | 每轮新学词学完后询问「开始拼写 / 跳过」；拼错退回词卡重拼；不适合拼写的词自动跳过 |
 | 统计复盘 | 掌握分布 / 30 天复习量预测 / 24 周热力图 / 遗忘风险榜 / 错词本 |
 | 本地存储 | localStorage，实测写入后关浏览器重开数据还在 |
-| 跨设备同步 | GitHub 仓库文件当数据后端，代码完成，等仓库建好才能实测 |
+| 跨设备同步 | GitHub 仓库文件当数据后端；无变化跳过提交；等仓库建好才能端到端实测 |
 | UI | 新拟态，主色 #2F6ED4 蓝 |
 
-**卡住的唯一一步：** GitHub 仓库还没建。本地已提交 5 个版本，remote 已指向 `wordbeat.git`，SSH 密钥与 `core.sshCommand` 已配好，只差仓库存在。
+**网络实测（家里电脑）**：`api.github.com` ✅ 通、`<用户名>.github.io` ✅ 通、`github.com` 网页 ❌ 不通、`raw.githubusercontent.com` ❌ 不通。同步与访问恰好都不依赖被墙的两项。学校电脑待实测。
+
+**卡住的唯一一步：** GitHub 仓库还没建。本地分支已改名 `main`（原来是 master，与文档里 `git push origin main` 对不上），remote 已指向 `wordbeat.git`，SSH 通道已验证可达（`ls-remote` 返回 Repository not found，说明握手通了、只差仓库存在）。注意 SSH 用的 `gh_deploy` 密钥在 `.workbuddy` 下，名字像单仓库部署密钥——若建仓推送时报无权限，需在仓库 Settings → Deploy keys 里添加 `gh_deploy.pub` 并勾选 write。
 
 ## 三、上线待办（按顺序做）
 
 1. **建仓库**：https://github.com/new?name=wordbeat ，选 Public，**不要**勾选 Add README / .gitignore / license
-2. **推送**：`git push -u origin main`（本机可用，走 `ssh://git@ssh.github.com:443` 绕过 22 端口封锁）
+2. **推送**：`git push -u origin main`（分支已是 main）
 3. **开 Pages**：仓库 Settings → Pages → Deploy from a branch → `main` / `(root)` → 约一分钟后访问上面那个网址
 4. **生成 token**：GitHub → Settings → Developer settings → Fine-grained personal access tokens
    - Repository access 只勾 `wordbeat` 这一个
    - Permissions 只给 **Contents: Read and write**
 5. **配置同步**：打开网站 → 设置 → 跨设备同步 → 仓库填 `<用户名>/wordbeat`，粘贴 token → 保存并同步
+6. **学校电脑实测**：能否打开 github.io 网址 + 同步是否成功
 
 ## 四、关键设计决策（改动前先读）
 
@@ -44,13 +48,15 @@
 - 目标保留率 90% 时反解得 **`下次复习 = 上次 + S 天`**，没有 EF 乘法，没有 ease hell
 - 答对 `S ×= max(1.3, 2.6 − 0.16D)`；答错 `S ×= 0.35` 但**不清零**（这是相对 SM-2 的关键修正）
 - 实测连续答对九次的间隔：1.8 → 3.3 → 6.2 → 11.7 → 22.4 → 43.4 → 84.5 → 165.6 → 326.4 天
-- 双通道结构（认词 r / 产出 p）已保留但只激活 r。所有调度函数都接受 channels 参数，加题型只需改 `activeTypes`
+- 双通道结构（认词 r / 产出 p）：en2cn 走 r；cn2en、spell 走 p。复习题由 `weakestChannel` 挑更弱的通道出题——某词从未走过 p 通道时复习会先补一道产出题，之后自然交替
 
-### 复刻自百词斩的三条机制
+### 学习流程：百词斩式（2026-11-14 用户拍板，推翻了早先「先整批过词再统一测」的决定）
 
-1. **固定每日配额**：新学与复习条数固定（默认 20 / 60），复习不会堆积到某天
-2. **先整批过词再统一测**：新词先逐张翻完，不夹题（用户明确要求，否决了"学一个测一个"）
-3. **答错退回词卡**：变红停 0.72 秒 → 跳到该词介绍页 → 点"看懂了，继续"→ 该词隔三道重考，最多两次
+1. **会话三段**：复习到期词 → 新学（每张词卡看完立刻测这个词）→ 拼写环节
+2. **拼写环节**：开始前询问「开始拼写 / 跳过」；拼写中随时可跳过结束；拼错退回词卡重拼（也走重考计数，最多两次）；不适合拼写的词（非纯字母或超长）自动排除
+3. **答错退回词卡**：变红停 0.72 秒 → 跳到该词介绍页 → 点"看懂了，继续"→ 该词隔三道重考，最多两次（新词即时测验的队列只有 1 题，等于马上重考）
+4. **新词的即时巩固题**在已启用题型里随机；复习题按最弱通道选题型
+5. 不要图片（用户确认过：图片素材维护成本高，文字卡够用）
 
 ### 答对不弹反馈条
 
@@ -58,10 +64,13 @@
 
 ### 存储与同步
 
-- localStorage，键前缀 `wl.`：进度 `wl.progress.v1.<bookId>`、日志 `wl.log.v1`、配置 `wl.config.v1`、同步 `wl.sync.v1`（含 token）
-- `file://` 和 `localhost` 都实测过跨重启保存；**预览窗口/iframe 沙箱不行**，为此做了顶部红条和设置页「存储」面板
-- 同步合并规则：**每个词取最后一次复习时间更晚的那份**；日志按天取各字段较大值。合并是幂等的，重复同步不会翻倍
+- localStorage，键前缀 `wl.`：进度 `wl.progress.v1.<bookId>`、日志 `wl.log.v1`、配置 `wl.config.v1`（cfgVersion 3，默认 activeTypes ['en2cn','cn2en']）、同步 `wl.sync.v1`（含 token）
+- 同步文件是仓库根目录的 **`progress.json`**（README 与设置页文案已统一为这个名字）
+- 合并规则：**每个词取最后一次复习时间更晚的那份**；日志按天取各字段较大值。合并是幂等的
+- **内容无变化就不提交**（stableStringify 键排序对比），否则每次打开页面都会多一个空 commit
+- 已知边界：①「清空词表进度」会被下次同步从远端合并回来（删除不传播，防误删）；②两台机器同一天各学 20 词，日志只记 20（按天取 max）
 - token 只存本机浏览器，权限最小化为单仓库 Contents 读写
+- 同步不含设置项（词表选择、每日配额等留在本机）
 
 ### UI 规范（用户明确过的偏好）
 
@@ -76,13 +85,15 @@
 index.html            入口（注意：#app 必须带 .app 类，之前漏过导致布局全坏）
 assets/style.css      全部样式
 src/srs.js            调度内核，纯函数无 DOM，可单独测试
-src/store.js          localStorage 封装 + 导出/恢复 + 存储可用性探测
-src/quiz.js           五种题型的生成与通道映射
-src/sync.js           GitHub Contents API 读写 + 合并
-src/app.js            视图与会话状态机（会话结构见 startSession）
+src/store.js          localStorage 封装 + 导出/恢复 + 存储可用性探测 + 配置版本迁移
+src/quiz.js           五种题型的生成与通道映射（spellable() 判断词是否适合拼写）
+src/sync.js           GitHub Contents API 读写 + 合并 + 无变化跳过
+src/app.js            视图与会话状态机（阶段机：startSession → enterReviewPhase /
+                      enterLearnPhase → advanceFromCard → enterSpellAsk → startSpell /
+                      finishSession，队列走完由 queueDrained 决定去哪）
 data/books.js         词库，装载时自动归一化释义里混入的第二词性
-sw.js                 离线缓存，改资源后记得 bump CACHE 版本号
-tools/selftest.js     21 项核心自检：node tools/selftest.js
+sw.js                 离线缓存，改资源后记得 bump CACHE 版本号（当前 v3）
+tools/selftest.js     25 项核心自检：node tools/selftest.js
 tools/make-icons.js   重新生成图标（纯 Node 手写 PNG 编码）
 HANDOVER.md           本文档
 ```
@@ -90,23 +101,27 @@ HANDOVER.md           本文档
 ## 六、已踩过的坑
 
 1. `#app` 容器没有 `.app` 类 → max-width 和内边距全部失效，页面顶到边
-2. 中途答错过的词不计入「今日新学」→ 改为在生词卡点"下一个"时计数（markLearned）
-3. 释义字段混入第二词性（如"益处 v. 有益于"）→ 装载时自动拆成 pos 与释义
-4. 柱状图被离群值压平 → 高度用开方缩放
-5. 预览窗口的存储是一次性的 → 已有红条提示，别在那里面测持久化
-6. 本机 github.com 网页直连不通，但 `ssh.github.com:443` 和 `api.github.com` 可达
+2. **词卡按钮处理函数多写 `s.li++` 会错位**：advanceFromCard 自己按 li 取词、queueDrained 里才 li++，点击处再 ++ 会导致「测的是下一张卡的词」（2026-11-14 实测抓到并修掉）
+3. **build('spell') 曾经永远返回 null**：拼写题没有选项，会被 `opts.length < 2` 检查误杀，静默回退成看词选义。已修：非 spell 题型才做选项检查
+4. 中途答错过的词不计入「今日新学」→ 改为在生词卡点"下一个"时计数（markLearned）
+5. 释义字段混入第二词性（如"益处 v. 有益于"）→ 装载时自动拆成 pos 与释义
+6. 柱状图被离群值压平 → 高度用开方缩放
+7. 预览窗口的存储是一次性的 → 已有红条提示，别在那里面测持久化
+8. 本机 github.com 网页直连不通，但 `ssh.github.com:443` 和 `api.github.com` 可达（`github.io` 也可达）
+9. 本机 shell 的 PATH 里没有 git；仓库是用 WorkBuddy 自带 PortableGit 建的：`C:\Users\Win10\AppData\Local\Programs\WorkBuddy\resources\vendor\PortableGit\cmd\git.exe`
+10. 控制台跑 node 输出中文会显示 GBK 乱码，是显示问题不是数据问题
 
 ## 七、验证手段（改完必跑）
 
 ```bash
-node tools/selftest.js          # 21 项，全过才算动过核心
+node tools/selftest.js          # 25 项，全过才算动过核心
 ```
 
-浏览器端验证脚本曾经用过三种：答题落库校验、卡片高度测量（验证不再抖动）、重考入队校验。都是临时 HTML + headless Edge，用完即删。
+2026-11-14 还做过一轮浏览器端全流程实测（本地 http 服务 + 自动答题驱动），覆盖：学一个测一个、答错退回重考、复习段优先、拼写环节开始/跳过/错词重拼、结算对账、调度双通道落库。改会话流程时建议照此重测。
 
 ## 八、下一步候选
 
-- 启用其余四种题型（看义选词 / 听音辨义 / 拼写 / 语境填词），接口在 quiz.js
-- 词库扩充：ECDICT（github.com/skywind3000/ECDICT）按 tag 裁剪，或用户自行导入教材词表
+- 启用其余出题题型（听音辨义 / 拼写 / 语境填词），接口在 quiz.js，设置里把灰显行改成开关即可
+- 词库扩充：现只 1 本 152 词的示例词库。可选 ECDICT（github.com/skywind3000/ECDICT）按教材 tag 裁剪，或用户导入自己的教材词表；注意 3500 词学满后 progress.json 约 600KB，接近 Contents API 1MB 上限，到时可按词表拆文件
 - 同步冲突的边界：两台机器同一秒答题理论上仍会以后写者为准，可忽略
 - PWA 已就绪（manifest + sw），部署后手机「添加到主屏幕」即可离线
