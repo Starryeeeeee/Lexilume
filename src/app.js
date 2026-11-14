@@ -462,8 +462,11 @@ window.WL = window.WL || {};
     var cur = currentItem();
     if (!cur) return;
     if (cur.from === 'practice') {
-      // 练习模式：只计对错，不写调度、不记日志、不触发同步
+      // 练习模式：不计入记忆调度，但计入每日练习量（激励用）
       if (ok) s.right++; else s.wrong++;
+      WL.store.bumpLog('pr', 1);
+      WL.store.flush();
+      if (WL.sync) WL.sync.markDirty();
       return;
     }
     var now = Date.now();
@@ -774,11 +777,13 @@ window.WL = window.WL || {};
     }
     wrap.appendChild(startCard);
 
-    // 练习模式：学有余力时的额外巩固，不动进度
+    // 练习模式：学有余力时的额外巩固，不动调度
     var pc = el('div', 'card');
     pc.appendChild(el('h2', 'section', '练习模式'));
+    var todayPr = today.pr || 0;
     pc.appendChild(h('<div class="small muted" style="margin-bottom:14px">抽 ' + PRACTICE_SIZE +
-      ' 个已学词做巩固练习，答错会展示正确答案；练习不计入学习进度与统计。</div>'));
+      ' 个已学词做巩固练习，答错会展示正确答案；不计入记忆调度。' +
+      (todayPr ? '今天已练 ' + todayPr + ' 题。' : '') + '</div>'));
 
     pc.appendChild(h('<div class="small muted" style="margin:0 0 8px">范围</div>'));
     pc.appendChild(segGroup([
@@ -1179,8 +1184,9 @@ window.WL = window.WL || {};
     var totalDone = s.right + s.wrong;
 
     if (s.practiceMode) {
+      var todayPr = WL.store.getToday().pr || 0;
       card.appendChild(h('<div style="font-size:20px;margin-bottom:6px">本轮练习完成</div>'));
-      card.appendChild(h('<div class="muted small">练习不计入学习进度</div>'));
+      card.appendChild(h('<div class="muted small">不计入记忆调度 · 今天累计练习 ' + todayPr + ' 题</div>'));
       card.appendChild(clayArt('sparkles_3d.png'));
       card.appendChild(h(
         '<div class="overview" style="margin-top:20px;grid-template-columns:repeat(3,1fr)">' +
@@ -1637,7 +1643,7 @@ window.WL = window.WL || {};
       d.setDate(start.getDate() + i);
       var k = WL.store.todayKey(d);
       var rec = log[k];
-      var v = rec ? (rec.nw + rec.rv) : 0;
+      var v = rec ? (rec.nw + rec.rv + (rec.pr || 0)) : 0;
       if (v > 0) activeDays++;
       if (v > maxV) maxV = v;
     }
@@ -1646,7 +1652,7 @@ window.WL = window.WL || {};
       d2.setDate(start.getDate() + j);
       var k2 = WL.store.todayKey(d2);
       var rec2 = log[k2];
-      var v2 = rec2 ? (rec2.nw + rec2.rv) : 0;
+      var v2 = rec2 ? (rec2.nw + rec2.rv + (rec2.pr || 0)) : 0;
       var cell = el('i');
       if (v2 > 0) {
         var alpha = 0.22 + 0.78 * Math.min(1, v2 / maxV);

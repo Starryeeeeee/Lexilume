@@ -100,7 +100,7 @@ window.WL = window.WL || {};
   function bumpLog(field, n) {
     var log = getLog();
     var k = todayKey();
-    if (!log[k]) log[k] = { nw: 0, rv: 0, ok: 0, bad: 0, ms: 0 };
+    if (!log[k]) log[k] = { nw: 0, rv: 0, ok: 0, bad: 0, ms: 0, pr: 0 };
     log[k][field] = (log[k][field] || 0) + (n == null ? 1 : n);
     writeJSON(K.log, log);
     return log[k];
@@ -118,7 +118,7 @@ window.WL = window.WL || {};
     for (var i = 0; i < 400; i++) {
       var k = todayKey(d);
       var rec = log[k];
-      if (rec && (rec.nw + rec.rv) > 0) {
+      if (rec && (rec.nw + rec.rv + (rec.pr || 0)) > 0) {
         n++;
       } else if (i > 0) {
         break;

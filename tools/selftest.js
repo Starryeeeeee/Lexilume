@@ -202,8 +202,8 @@ const sc = WL.srs.newState(word, 0);
 sc.cut = 500 * DAY;
 const mp2 = m.mergeProgress({ w1: sa }, { w2: sc });
 ok('删除不传播：并集保留两边', Object.keys(mp2).length === 2 && !!mp2.w2.cut, JSON.stringify(Object.keys(mp2)));
-const ml = m.mergeLog({ '2026-01-01': { nw: 10, rv: 5, ok: 8, bad: 2, ms: 100 } }, { '2026-01-01': { nw: 20, rv: 3, ok: 9, bad: 1, ms: 200 } });
-ok('同日日志按字段取较大值（不相加）', ml['2026-01-01'].nw === 20 && ml['2026-01-01'].rv === 5 && ml['2026-01-01'].ok === 9, JSON.stringify(ml['2026-01-01']));
+const ml = m.mergeLog({ '2026-01-01': { nw: 10, rv: 5, ok: 8, bad: 2, ms: 100, pr: 3 } }, { '2026-01-01': { nw: 20, rv: 3, ok: 9, bad: 1, ms: 200, pr: 5 } });
+ok('同日日志按字段取较大值（不相加）', ml['2026-01-01'].nw === 20 && ml['2026-01-01'].rv === 5 && ml['2026-01-01'].ok === 9 && ml['2026-01-01'].pr === 5, JSON.stringify(ml['2026-01-01']));
 const md = m.mergeData({ books: { a: { w1: sa } }, log: {} }, { books: { b: { w9: sb } }, log: {} });
 ok('合并按词书取并集', Object.keys(md.books).length === 2 && Object.keys(md.books.a).length === 1 && Object.keys(md.books.b).length === 1);
 
