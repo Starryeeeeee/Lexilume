@@ -16,6 +16,9 @@ window.WL = window.WL || {};
   // 练习模式一轮的题数
   var PRACTICE_SIZE = 10;
 
+  // 练习模式的范围与题型选择（页面重渲染间保持）
+  var practiceSel = { scope: 'all', mode: 'en2cn' };
+
   // 拼写环节：纠正后重排确认的最大轮次（防止个别词无限循环；跳过按钮随时可退出）
   var SPELL_REQUEUE_MAX = 3;
 
@@ -54,6 +57,17 @@ window.WL = window.WL || {};
     var d = document.createElement('div');
     d.innerHTML = html;
     return d.firstElementChild;
+  }
+
+  // 分段按钮组：同一组内单选，选中态内凹 + 品牌色（替代原生下拉框）
+  function segGroup(options, current, onPick) {
+    var box = el('div', 'seg');
+    options.forEach(function (o) {
+      var b = el('button', 'seg-btn' + (o[0] === current ? ' on' : ''), o[1]);
+      b.onclick = function () { onPick(o[0]); };
+      box.appendChild(b);
+    });
+    return box;
   }
 
   // 完成页插画：Fluent Emoji 3D（微软开源，MIT 协议）放在新拟态圆托上
@@ -750,29 +764,28 @@ window.WL = window.WL || {};
     // 练习模式：学有余力时的额外巩固，不动进度
     var pc = el('div', 'card');
     pc.appendChild(el('h2', 'section', '练习模式'));
-    pc.appendChild(h('<div class="small muted" style="margin-bottom:12px">抽 ' + PRACTICE_SIZE +
+    pc.appendChild(h('<div class="small muted" style="margin-bottom:14px">抽 ' + PRACTICE_SIZE +
       ' 个已学词做巩固练习，答错会展示正确答案；练习不计入学习进度与统计。</div>'));
-    var prow = el('div', 'row');
-    var selScope = el('select');
-    selScope.style.flex = '1';
-    [['all', '范围：全部已学词'], ['wrong', '范围：只练答错的词'], ['risk', '范围：只练遗忘风险词']].forEach(function (o) {
-      var op = el('option', null, o[1]);
-      op.value = o[0];
-      selScope.appendChild(op);
-    });
-    prow.appendChild(selScope);
-    var selType = el('select');
-    selType.style.flex = '1';
-    [['en2cn', '题型：看词选义'], ['cn2en', '题型：看义选词']].forEach(function (o) {
-      var op = el('option', null, o[1]);
-      op.value = o[0];
-      selType.appendChild(op);
-    });
-    prow.appendChild(selType);
-    var pgo = el('button', 'btn primary', '开始练习');
-    pgo.onclick = function () { startPractice(selType.value, selScope.value); };
-    prow.appendChild(pgo);
-    pc.appendChild(prow);
+
+    pc.appendChild(h('<div class="small muted" style="margin:0 0 8px">范围</div>'));
+    pc.appendChild(segGroup([
+      ['all', '全部已学词'], ['wrong', '只练答错的词'], ['risk', '只练遗忘风险词']
+    ], practiceSel.scope, function (v) { practiceSel.scope = v; render(); }));
+
+    var gap = el('div');
+    gap.style.height = '14px';
+    pc.appendChild(gap);
+
+    pc.appendChild(h('<div class="small muted" style="margin:0 0 8px">题型</div>'));
+    pc.appendChild(segGroup([
+      ['en2cn', '看词选义'], ['cn2en', '看义选词']
+    ], practiceSel.mode, function (v) { practiceSel.mode = v; render(); }));
+
+    var pgo = el('button', 'btn primary block', '开始练习');
+    pgo.style.marginTop = '18px';
+    if (!learned) pgo.disabled = true;
+    pgo.onclick = function () { startPractice(practiceSel.mode, practiceSel.scope); };
+    pc.appendChild(pgo);
     wrap.appendChild(pc);
 
     if (today.ok + today.bad > 0) {
