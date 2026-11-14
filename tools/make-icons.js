@@ -50,7 +50,7 @@ function png(size, painter) {
   ]);
 }
 
-const BG = [46, 92, 78, 255];
+const BG = [47, 110, 212, 255];
 const FG = [246, 244, 239, 255];
 
 function make(size, file) {

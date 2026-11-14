@@ -434,7 +434,7 @@ window.WL = window.WL || {};
 
   function topbar() {
     var bar = el('div', 'topbar');
-    var brand = h('<div class="brand">词<span>律</span></div>');
+    var brand = h('<div class="brand">Lexi<span>lume</span></div>');
     bar.appendChild(brand);
 
     var tabs = el('nav', 'tabs');
@@ -982,7 +982,7 @@ window.WL = window.WL || {};
     var a = document.createElement('a');
     var d = new Date();
     a.href = URL.createObjectURL(blob);
-    a.download = '词律备份-' + WL.store.todayKey() + '.json';
+    a.download = 'Lexilume备份-' + WL.store.todayKey() + '.json';
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
     toast('已导出');

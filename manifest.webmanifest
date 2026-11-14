@@ -1,6 +1,6 @@
 {
-  "name": "词律 · 单词学习",
-  "short_name": "词律",
+  "name": "Lexilume · 单词学习",
+  "short_name": "Lexilume",
   "description": "按记忆曲线调度的本地单词学习工具",
   "start_url": "./index.html",
   "display": "standalone",

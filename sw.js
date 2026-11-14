@@ -1,4 +1,4 @@
-var CACHE = 'wordbeat-v4';
+var CACHE = 'lexilume-v5';
 var ASSETS = [
   './',
   './index.html',
