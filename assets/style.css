@@ -65,7 +65,7 @@ input, textarea { font-family: inherit; border: none; outline: none; background:
   gap: 16px;
 }
 .brand {
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 600;
   letter-spacing: 0.16em;
   color: var(--ink-2);
@@ -173,14 +173,14 @@ h2.section {
 .btn.primary {
   background: var(--accent);
   color: #fff;
-  box-shadow: 4px 4px 10px rgba(96, 108, 128, 0.32), -3px -3px 8px var(--sh-light);
+  box-shadow: var(--raise-sm);
 }
 .btn.primary:hover {
   background: var(--accent-deep);
-  box-shadow: 2px 2px 5px rgba(96, 108, 128, 0.3), -2px -2px 5px var(--sh-light);
+  box-shadow: var(--raise-xs);
 }
 .btn.primary:active {
-  box-shadow: inset 3px 3px 8px rgba(18, 48, 105, 0.45), inset -2px -2px 6px rgba(255, 255, 255, 0.16);
+  box-shadow: var(--press-sm);
 }
 .btn.ghost { box-shadow: var(--raise-xs); color: var(--ink-3); }
 .btn.ghost:hover { box-shadow: none; color: var(--ink-2); }
@@ -310,7 +310,7 @@ h2.section {
   box-shadow: var(--raise-sm);
   transition: box-shadow var(--t), background var(--t), color var(--t);
   width: 100%;
-  font-size: 16px;
+  font-size: 17px;
 }
 .opt:hover { box-shadow: var(--raise-xs); }
 .opt:active { box-shadow: var(--press-sm); }
@@ -610,14 +610,14 @@ h2.section {
 .qcard.answered-ok { cursor: pointer; }
 .opt .opt-en {
   display: block;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.3;
   word-break: break-word;
 }
 .opt .opt-zh {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   line-height: 1.35;
   color: var(--ink-3);
@@ -685,7 +685,7 @@ h2.section {
 @media (max-width: 640px) {
   .app { padding: 22px 18px 100px; }
   .topbar { margin-bottom: 22px; }
-  .brand { font-size: 17px; letter-spacing: 0.1em; }
+  .brand { font-size: 20px; letter-spacing: 0.1em; }
   .tabs {
     position: fixed;
     left: 0; right: 0; bottom: 0;
