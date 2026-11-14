@@ -165,10 +165,32 @@ window.WL = window.WL || {};
 
   function usage() {
     var total = 0;
-    Object.keys(localStorage).forEach(function (k) {
-      if (k.indexOf('wl.') === 0) total += (localStorage.getItem(k) || '').length;
-    });
+    try {
+      Object.keys(localStorage).forEach(function (k) {
+        if (k.indexOf('wl.') === 0) total += (localStorage.getItem(k) || '').length;
+      });
+    } catch (e) { return -1; }
     return total;
+  }
+
+  var availCache = null;
+
+  // 真正写一次再读回来，比只判断 localStorage 是否存在可靠
+  function available() {
+    if (availCache !== null) return availCache;
+    try {
+      var k = '__wl_probe__';
+      localStorage.setItem(k, '1');
+      availCache = localStorage.getItem(k) === '1';
+      localStorage.removeItem(k);
+    } catch (e) {
+      availCache = false;
+    }
+    return availCache;
+  }
+
+  function origin() {
+    try { return location.origin || location.protocol; } catch (e) { return '未知'; }
   }
 
   WL.store = {
@@ -186,6 +208,8 @@ window.WL = window.WL || {};
     importAll: importAll,
     resetBook: resetBook,
     resetAll: resetAll,
-    usage: usage
+    usage: usage,
+    available: available,
+    origin: origin
   };
 })(window.WL);

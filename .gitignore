@@ -1,4 +1,7 @@
 _*.png
 _probe.html
+_t.html
+_p2.html
+_prof*/
 .DS_Store
 node_modules/

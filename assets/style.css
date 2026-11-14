@@ -503,6 +503,25 @@ h2.section {
 .empty { text-align: center; padding: 70px 20px; color: var(--ink-3); }
 .empty .big { font-size: 17px; color: var(--ink-2); margin-bottom: 10px; font-weight: 600; }
 
+.warnbar {
+  background: #F2E3E0;
+  color: #8B3D35;
+  border-radius: 16px;
+  padding: 18px 20px;
+  margin-bottom: 22px;
+  box-shadow: var(--press-xs);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.warnbar b { font-weight: 600; }
+.warnbar code {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+  background: rgba(139, 61, 53, 0.09);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
 /* ---------- 提示 ---------- */
 .toast {
   position: fixed;

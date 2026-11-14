@@ -321,6 +321,7 @@ window.WL = window.WL || {};
     var app = document.getElementById('app');
     app.innerHTML = '';
     app.appendChild(topbar());
+    if (!WL.store.available()) app.appendChild(storageBanner());
 
     var body;
     if (S.view === 'study') body = viewStudy();
@@ -434,6 +435,20 @@ window.WL = window.WL || {};
     }
 
     return wrap;
+  }
+
+  // 存储不可用时在顶部明说，别让用户白学一轮
+  function storageBanner() {
+    var d = el('div', 'warnbar');
+    d.innerHTML =
+      '<b>当前页面写不进本地存储，这一轮的记录不会保存。</b>' +
+      '<div class="small" style="margin-top:8px;line-height:1.85">' +
+      '预览窗口和一些嵌入环境会把浏览器的存储隔离成一次性的，关掉就清空。换下面任意一种方式打开就能正常记录：<br>' +
+      '① 双击文件夹里的 <code>index.html</code>，数据存在本机浏览器，断网也照常<br>' +
+      '② 部署之后用网址打开，例如 <code>https://用户名.github.io/cile/</code><br>' +
+      '③ 只想临时留存，去「设置 → 导出备份」存一个 JSON，换环境再导回来' +
+      '</div>';
+    return d;
   }
 
   function viewStudy() {
@@ -1023,6 +1038,41 @@ window.WL = window.WL || {};
     var cfg = WL.store.getConfig();
     var wrap = el('div', 'stack');
 
+    // 存储状况放在最前，换设备或换地址时一眼能看出记录为什么不在
+    var c0 = el('div', 'card');
+    c0.appendChild(el('h2', 'section', '存储'));
+    var avail = WL.store.available();
+    var progAll = 0, bookN = 0;
+    (WL.books || []).forEach(function (b) {
+      var n = Object.keys(WL.store.getProgress(b.id)).length;
+      progAll += n;
+      if (n) bookN++;
+    });
+    var rows = [
+      ['状态', avail ? '可用' : '不可用（记录不会保存）', avail ? 'var(--accent-deep)' : 'var(--wrong)'],
+      ['打开方式', WL.store.origin(), 'var(--ink-2)'],
+      ['已学词条', progAll + ' 条，分布在 ' + bookN + ' 份词表', 'var(--ink-2)'],
+      ['有记录的天数', Object.keys(WL.store.getLog()).length + ' 天', 'var(--ink-2)'],
+      ['占用空间', (WL.store.usage() / 1024).toFixed(1) + ' KB', 'var(--ink-2)']
+    ];
+    rows.forEach(function (r) {
+      var row = el('div', 'spread');
+      row.style.padding = '10px 2px';
+      row.appendChild(el('span', 'small', r[0]));
+      var v = el('span', 'small');
+      v.style.color = r[2];
+      v.style.wordBreak = 'break-all';
+      v.style.textAlign = 'right';
+      v.textContent = r[1];
+      row.appendChild(v);
+      c0.appendChild(row);
+    });
+    c0.appendChild(h('<div class="small muted" style="margin-top:12px;line-height:1.8">' +
+      '数据按「打开方式」分开存放。换一个地址打开就是另一份空记录，' +
+      '比如从预览窗口换到双击 index.html，数据不会自动跟过去。' +
+      '搬家请用下面的导出与恢复。</div>'));
+    wrap.appendChild(c0);
+
     var c1 = el('div', 'card');
     c1.appendChild(el('h2', 'section', '每日配额'));
 
@@ -1138,9 +1188,6 @@ window.WL = window.WL || {};
       toast('已清空');
     };
     c4.appendChild(b3);
-
-    var kb = (WL.store.usage() / 1024).toFixed(0);
-    c4.appendChild(h('<div class="small muted" style="margin-top:12px">当前占用 ' + kb + ' KB</div>'));
     wrap.appendChild(c4);
 
     var c5 = el('div', 'card');
