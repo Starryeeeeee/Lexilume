@@ -410,8 +410,11 @@ window.WL = window.WL || {};
           if (!cur2) return;
           if (cur2.from === 'practice') {
             // 练习错题：看一眼正确答案后排到队尾稍后再答，重复直到答对
-            s.items.push({ wid: cur2.wid, from: 'practice', retry: (cur2.retry || 0) + 1 });
-            s.total = s.items.length;
+            var cutNow = WL.store.getProgress(s.bookId)[cur2.wid] && WL.store.getProgress(s.bookId)[cur2.wid].cut;
+            if (!cutNow) {
+              s.items.push({ wid: cur2.wid, from: 'practice', retry: (cur2.retry || 0) + 1 });
+              s.total = s.items.length;
+            }
             advanceCorrect();
           } else if (cur2.from === 'spell') {
             spellRetryInPlace();
@@ -442,8 +445,9 @@ window.WL = window.WL || {};
         if (s.spellMissed) {
           var cur2 = currentItem();
           s.answered = null;
-          if (cur2) {
-            s.items.push({ wid: cur2.wid, from: 'spell', retry: ((cur2.retry || 0) + 1) });
+          var cutNow = cur2 && WL.store.getProgress(s.bookId)[cur2.wid] && WL.store.getProgress(s.bookId)[cur2.wid].cut;
+          if (cur2 && !cutNow) {
+            s.items.push({ wid: cur2.wid, from: 'spell', retry: (cur2.retry || 0) + 1 });
             s.total = s.items.length;
           }
           advanceCorrect();
@@ -953,6 +957,21 @@ window.WL = window.WL || {};
 
     if (s.phase === 'spell' && !s.retryCard) {
       var exit = el('div', 'study-exit');
+      var cutBtn = el('button', 'btn ghost');
+      cutBtn.textContent = '斩';
+      cutBtn.title = '斩：这个词不再进入后续复习';
+      cutBtn.onclick = function () {
+        var cur = currentItem();
+        if (!cur) return;
+        var w = wordOf(cur.wid);
+        if (!w) return;
+        markCut(cur.wid, w);
+        s.items = s.items.filter(function (it, idx) { return idx <= s.i || it.wid !== cur.wid; });
+        s.total = s.items.length;
+        toast('已斩「' + w.w + '」，不再进入复习');
+        render();
+      };
+      exit.appendChild(cutBtn);
       var skip = el('button', 'btn ghost');
       skip.textContent = '跳过剩余拼写，完成今日学习';
       skip.onclick = finishSession;
