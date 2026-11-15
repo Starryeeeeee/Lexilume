@@ -1163,10 +1163,13 @@ window.WL = window.WL || {};
     }
 
     if (q.type === 'spell') {
-      // 拼写模式：只显示中文释义，单词音频在出题时自动播放；读音按钮兼作提示
-      var replay = el('button', 'btn ghost', '再听一次');
-      replay.onclick = function () { WL.quiz.speak(word.w, true); };
-      card.appendChild(replay);
+      // 拼写模式：只显示中文释义，单词音频在出题时自动播放；音频图标兼作提示（与学习卡同款）
+      var replay = el('span', 'speak');
+      replay.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+      replay.onclick = function (e) { e.stopPropagation(); WL.quiz.speak(word.w, true); };
+      var raWrap = el('div', 'spell-audio');
+      raWrap.appendChild(replay);
+      card.appendChild(raWrap);
 
       // 拼错过：就地亮出正确拼写，听读音后重新拼，不跳下一词
       if (s.spellMissed) {
