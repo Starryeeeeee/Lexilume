@@ -283,19 +283,13 @@ h2.section {
 .learn-ex-cn { color: var(--ink-3); font-size: 13px; margin-top: 6px; }
 
 .speak {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  box-shadow: var(--raise-xs);
+  cursor: pointer;
   color: var(--accent-deep);
-  transition: box-shadow var(--t);
 }
-.speak:hover { box-shadow: none; }
-.speak:active { box-shadow: var(--press-xs); }
 
 /* ---------- 选项 ---------- */
 .options { display: grid; gap: 14px; margin-top: 28px; }
