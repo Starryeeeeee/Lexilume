@@ -843,7 +843,7 @@ window.WL = window.WL || {};
       '<div class="spread" style="margin-bottom:14px">' +
       '<div><div style="font-size:16px">今天的学习</div>' +
       '<div class="small muted">' + estText + '</div></div>' +
-      '<div class="small muted">上限 新' + cfg.newLimit + ' / 复' + cfg.reviewLimit + '</div>' +
+      '<div class="small muted" style="white-space:nowrap">上限 新' + cfg.newLimit + ' / 复' + cfg.reviewLimit + '</div>' +
       '</div>'
     ));
 

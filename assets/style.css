@@ -186,6 +186,7 @@ h2.section {
 .btn.ghost { box-shadow: var(--raise-xs); color: var(--ink-3); }
 .btn.ghost:hover { box-shadow: none; color: var(--ink-2); }
 .btn.ghost:active { box-shadow: var(--press-xs); }
+.btn:disabled { opacity: 0.45; cursor: default; }
 .btn.block { width: 100%; }
 .btn.lg { padding: 16px 24px; font-size: 16px; border-radius: 16px; }
 .btn:disabled { color: var(--ink-3); box-shadow: none; opacity: 0.6; cursor: not-allowed; }
