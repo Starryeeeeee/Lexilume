@@ -105,7 +105,9 @@ window.WL = window.WL || {};
 
   /* ============ 会话 ============ */
 
-  function startSession(reviewOnly) {
+  // mode: 'all' 复习+新学 | 'review' 只复习 | 'new' 只新学
+  function startSession(mode) {
+    mode = mode || 'all';
     var cfg = WL.store.getConfig();
     var book = curBook();
     if (!book) return;
@@ -122,19 +124,20 @@ window.WL = window.WL || {};
       return WL.srs.overdueDays(b.st, now, chs) - WL.srs.overdueDays(a.st, now, chs);
     });
     due = due.slice(0, cfg.reviewLimit);
+    if (mode === 'new') due = [];
 
-    var fresh = reviewOnly ? [] : book.words.filter(function (w) { return !prog[w.id]; });
+    var fresh = mode === 'review' ? [] : book.words.filter(function (w) { return !prog[w.id]; });
     if (cfg.shuffleNew) fresh = WL.quiz.shuffle(fresh);
     fresh = fresh.slice(0, cfg.newLimit);
 
     if (!due.length && !fresh.length) {
-      toast(reviewOnly ? '当前没有到期复习的词' : '当前没有要学的内容，可以先导入词表');
+      toast(mode === 'review' ? '当前没有到期复习的词' : '当前没有要学的内容，可以先导入词表');
       return;
     }
 
     S.session = {
       phase: 'review',
-      reviewOnly: !!reviewOnly,
+      mode: mode,
       learn: fresh.map(function (w) { return w.id; }),
       li: 0,
       reviewWids: due.map(function (x) { return x.w.id; }),
@@ -825,24 +828,25 @@ window.WL = window.WL || {};
     var dueLimited = Math.min(dueN, cfg.reviewLimit);
     var nextNew = Math.min(cfg.newLimit, total - learned);
     var estMin = Math.max(1, Math.round((dueLimited * 15 + nextNew * 40) / 60));
+    var estText = dueLimited + nextNew > 0
+      ? '复习 ' + dueLimited + ' 个 · 新学 ' + nextNew + ' 个 · 约 ' + estMin + ' 分钟'
+      : '今天没有待学内容';
     startCard.appendChild(h(
       '<div class="spread" style="margin-bottom:14px">' +
       '<div><div style="font-size:16px">今天的学习</div>' +
-      '<div class="small muted">复习 ' + dueLimited + ' 个 · 新学 ' + nextNew + ' 个 · 约 ' + estMin + ' 分钟</div></div>' +
+      '<div class="small muted">' + estText + '</div></div>' +
       '<div class="small muted">上限 新' + cfg.newLimit + ' / 复' + cfg.reviewLimit + '</div>' +
       '</div>'
     ));
 
     var goRow = el('div', 'learn-actions');
-    if (dueN > 0) {
-      var ro = el('button', 'btn lg', '只复习');
-      ro.style.cssText = 'flex:none;width:96px;color:var(--ink-2)';
-      ro.onclick = function () { startSession(true); };
-      goRow.appendChild(ro);
-    }
-    var go = el('button', 'btn primary lg btn-go', dueN + nextNew > 0 ? '开始' : '没有待学内容');
-    go.disabled = dueN + nextNew === 0;
-    go.onclick = function () { startSession(false); };
+    var ro = el('button', 'btn lg btn-go', '复习');
+    ro.disabled = !dueN;
+    ro.onclick = function () { startSession('review'); };
+    goRow.appendChild(ro);
+    var go = el('button', 'btn primary lg btn-go', '新学');
+    go.disabled = !nextNew;
+    go.onclick = function () { startSession('new'); };
     goRow.appendChild(go);
     startCard.appendChild(goRow);
 
