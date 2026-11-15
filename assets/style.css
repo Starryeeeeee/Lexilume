@@ -283,13 +283,19 @@ h2.section {
 .learn-ex-cn { color: var(--ink-3); font-size: 13px; margin-top: 6px; }
 
 .speak {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  cursor: pointer;
+  box-shadow: var(--raise-xs);
   color: var(--accent-deep);
+  transition: box-shadow var(--t);
 }
+.speak:hover { box-shadow: none; }
+.speak:active { box-shadow: var(--press-xs); }
 
 /* ---------- 选项 ---------- */
 .options { display: grid; gap: 14px; margin-top: 28px; }
@@ -511,54 +517,17 @@ h2.section {
 .empty { text-align: center; padding: 70px 20px; color: var(--ink-3); }
 .empty .big { font-size: 17px; color: var(--ink-2); margin-bottom: 10px; font-weight: 600; }
 
-/* ---------- 完成页插画（Fluent Emoji 3D，MIT） ---------- */
+/* ---------- 完成页插画（Fluent Emoji 3D，MIT）：直接展示，无底座无动画 ---------- */
 .clay-hero {
-  position: relative;
   display: flex;
   justify-content: center;
-  margin: 24px 0 2px;
+  margin: 20px 0 4px;
 }
-.clay-hero::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 200px;
-  height: 200px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(47, 110, 212, 0.09), rgba(47, 110, 212, 0));
-  pointer-events: none;
-}
-.clay-orb {
-  position: relative;
-  width: 104px;
-  height: 104px;
-  border-radius: 50%;
-  background: var(--bg);
-  box-shadow: var(--raise-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: clayPop 460ms cubic-bezier(.34, 1.56, .64, 1) both,
-             clayFloat 3.4s ease-in-out 460ms infinite;
-}
-.clay-orb img {
-  width: 60px;
-  height: 60px;
-  filter: drop-shadow(0 9px 11px rgba(96, 108, 128, 0.35));
+.clay-hero img {
+  width: 96px;
+  height: 96px;
+  filter: drop-shadow(0 8px 10px rgba(96, 108, 128, 0.32));
   user-select: none;
-}
-@keyframes clayPop {
-  from { transform: scale(0.55); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-}
-@keyframes clayFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .clay-orb { animation: none; }
 }
 
 .warnbar {
@@ -627,7 +596,6 @@ h2.section {
 .opt.right .opt-zh { color: #4E7A6A; }
 
 /* ---------- 拼写就地重拼：正确拼写提示（同样平滑展开） ---------- */
-.spell-audio { text-align: center; margin-top: 6px; }
 @keyframes spellSlide {
   from { max-height: 0; opacity: 0; }
   to { max-height: 140px; opacity: 1; }
