@@ -299,6 +299,17 @@ h2.section {
 .speak:hover { box-shadow: none; }
 .speak:active { box-shadow: var(--press-xs); }
 
+/* 拼写页的裸音频图标：视觉同图标，命中区 44px */
+.spell-audio .speak-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--accent-deep);
+  padding: 11px;
+  margin: -11px;
+}
+
 /* ---------- 选项 ---------- */
 .options { display: grid; gap: 14px; margin-top: 28px; }
 .opt {
