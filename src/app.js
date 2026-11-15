@@ -631,7 +631,7 @@ window.WL = window.WL || {};
     fRepo.appendChild(el('label', null, '仓库'));
     var iRepo = el('input');
     iRepo.type = 'text';
-    iRepo.value = sy.owner + '/' + sy.repo;
+    iRepo.placeholder = '用户名/仓库名';
     fRepo.appendChild(iRepo);
     card.appendChild(fRepo);
 
@@ -647,7 +647,8 @@ window.WL = window.WL || {};
     var btn = el('button', 'btn primary block lg', '登录');
     btn.style.marginTop = '18px';
     btn.onclick = function () {
-      var parts = iRepo.value.trim().split('/');
+      var repoVal = iRepo.value.trim() || 'Starryeeeeee/Lexilume';
+      var parts = repoVal.split('/');
       if (parts.length !== 2 || !parts[0].trim() || !parts[1].trim()) {
         err.textContent = '仓库要写成 用户名/仓库名';
         return;
