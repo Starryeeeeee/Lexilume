@@ -406,9 +406,18 @@ window.WL = window.WL || {};
     } else {
       setTimeout(function () {
         if (S.session === s && s.answered && !s.answered.ok) {
-          // 练习模式答错：停留看一眼正确答案后直接下一题，不退回词卡
-          if (currentItem() && currentItem().from === 'practice') advanceCorrect();
-          else enterRetry();
+          var cur2 = currentItem();
+          if (!cur2) return;
+          if (cur2.from === 'practice') {
+            // 练习错题：看一眼正确答案后排到队尾稍后再答，重复直到答对
+            s.items.push({ wid: cur2.wid, from: 'practice', retry: (cur2.retry || 0) + 1 });
+            s.total = s.items.length;
+            advanceCorrect();
+          } else if (cur2.from === 'spell') {
+            spellRetryInPlace();
+          } else {
+            enterRetry();
+          }
         }
       }, 720);
     }
