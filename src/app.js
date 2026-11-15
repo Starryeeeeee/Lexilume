@@ -19,9 +19,6 @@ window.WL = window.WL || {};
   // 练习模式的范围与题型选择（页面重渲染间保持）
   var practiceSel = { scope: 'all', mode: 'en2cn' };
 
-  // 拼写环节：纠正后重排确认的最大轮次（防止个别词无限循环；跳过按钮随时可退出）
-  var SPELL_REQUEUE_MAX = 3;
-
   function getBook(id) {
     if (bookCache[id]) return bookCache[id];
     var books = WL.books || [];
@@ -434,13 +431,12 @@ window.WL = window.WL || {};
       setTimeout(function () {
         if (S.session !== s || !s.answered || !s.answered.ok) return;
         // 这一次出现是「拼错后纠正过来的」：把词排到队列最后，稍后再拼一次确认记忆；
-        // 再拼对就过，再拼错就重复这个循环（最多重排 SPELL_REQUEUE_MAX 轮）
+        // 再拼对就过，再拼错就重复这个循环，直到验证正确（「跳过剩余拼写」随时可退出）
         if (s.spellMissed) {
           var cur2 = currentItem();
-          var requeues = (cur2 && cur2.retry) || 0;
           s.answered = null;
-          if (cur2 && requeues < SPELL_REQUEUE_MAX) {
-            s.items.push({ wid: cur2.wid, from: 'spell', retry: requeues + 1 });
+          if (cur2) {
+            s.items.push({ wid: cur2.wid, from: 'spell', retry: ((cur2.retry || 0) + 1) });
             s.total = s.items.length;
           }
           advanceCorrect();
