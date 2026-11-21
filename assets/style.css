@@ -555,6 +555,21 @@ h2.section {
   user-select: none;
 }
 
+/* 完成页大卡：纵向撑开、留白拉满，避免内容挤成一条扁卡 */
+.finish-card {
+  padding: 40px 32px 36px;
+  min-height: 500px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 26px;
+}
+.finish-card .finish-title { font-size: 26px; margin: 0; }
+.finish-card .muted { font-size: 15px; line-height: 1.8; }
+.finish-card .clay-hero { margin: 0; }
+.finish-card .clay-hero img { width: 120px; height: 120px; }
+.finish-card .overview { margin: 0; }
+
 .warnbar {
   background: #F2E3E0;
   color: #8B3D35;
@@ -694,4 +709,6 @@ h2.section {
   .opt { padding: 15px 16px; font-size: 15px; }
   .toast { bottom: 96px; }
   .clay-hero img { width: 80px; height: 80px; }
+  .finish-card { min-height: 420px; padding: 32px 22px 30px; gap: 20px; }
+  .finish-card .clay-hero img { width: 84px; height: 84px; }
 }

@@ -1048,20 +1048,18 @@ window.WL = window.WL || {};
     var n = s.spellQueue.length;
 
     var wrap = el('div', 'stack');
-    var card = el('div', 'card');
+    var card = el('div', 'card finish-card');
     card.style.textAlign = 'center';
-    card.appendChild(h('<div style="font-size:24px;margin-bottom:6px">今日新学完成</div>'));
+    card.appendChild(h('<div class="finish-title">今日新学完成</div>'));
     card.appendChild(h('<div class="muted small">新学了 ' + Object.keys(s.newDone).length +
       ' 个词。要进入拼写模式吗？拼写模式只显示中文释义并朗读单词，你来拼写。</div>'));
     card.appendChild(clayArt('party_popper_3d.png'));
 
     var go = el('button', 'btn primary block lg', '进入拼写模式（' + n + ' 词）');
-    go.style.marginTop = '20px';
     go.onclick = startSpell;
     card.appendChild(go);
 
     var skip = el('button', 'btn ghost block', '跳过拼写，完成今日学习');
-    skip.style.marginTop = '8px';
     skip.onclick = finishSession;
     card.appendChild(skip);
 
@@ -1338,17 +1336,17 @@ window.WL = window.WL || {};
   function viewDone() {
     var s = S.session;
     var wrap = el('div', 'stack');
-    var card = el('div', 'card');
+    var card = el('div', 'card finish-card');
     card.style.textAlign = 'center';
     var totalDone = s.right + s.wrong;
 
     if (s.practiceMode) {
       var todayPr = WL.store.getToday().pr || 0;
-      card.appendChild(h('<div style="font-size:24px;margin-bottom:6px">本轮练习完成</div>'));
+      card.appendChild(h('<div class="finish-title">本轮练习完成</div>'));
       card.appendChild(h('<div class="muted small">今天累计练习 ' + todayPr + ' 题</div>'));
       card.appendChild(clayArt('sparkles_3d.png'));
       card.appendChild(h(
-        '<div class="overview" style="margin-top:20px;grid-template-columns:repeat(3,1fr)">' +
+        '<div class="overview" style="grid-template-columns:repeat(3,1fr)">' +
         '<div class="ov-cell"><div class="ov-num">' + s.right + '</div><div class="ov-label">答对</div></div>' +
         '<div class="ov-cell"><div class="ov-num">' + s.wrong + '</div><div class="ov-label">答错</div></div>' +
         '<div class="ov-cell"><div class="ov-num">' + (totalDone ? Math.round(s.right / totalDone * 100) : 0) + '%</div><div class="ov-label">正确率</div></div>' +
@@ -1356,16 +1354,15 @@ window.WL = window.WL || {};
       ));
 
       var more = el('button', 'btn primary block lg', '再练一组');
-      more.style.marginTop = '20px';
       more.onclick = function () { startPractice(s.practiceMode); };
       card.appendChild(more);
     } else {
       var mins = Math.max(1, Math.round((Date.now() - s.t0) / 60000));
-      card.appendChild(h('<div style="font-size:24px;margin-bottom:6px">本轮学习完成</div>'));
+      card.appendChild(h('<div class="finish-title">本轮学习完成</div>'));
       card.appendChild(h('<div class="muted small">用时约 ' + mins + ' 分钟</div>'));
       card.appendChild(clayArt('trophy_3d.png'));
       card.appendChild(h(
-        '<div class="overview" style="margin-top:20px">' +
+        '<div class="overview">' +
         '<div class="ov-cell"><div class="ov-num">' + Object.keys(s.newDone).length + '</div><div class="ov-label">新学</div></div>' +
         '<div class="ov-cell"><div class="ov-num">' + Object.keys(s.revDone).length + '</div><div class="ov-label">复习</div></div>' +
         '<div class="ov-cell"><div class="ov-num">' + s.right + '</div><div class="ov-label">答对</div></div>' +
@@ -1374,13 +1371,11 @@ window.WL = window.WL || {};
       ));
 
       var again = el('button', 'btn primary block lg', '再来一组');
-      again.style.marginTop = '20px';
       again.onclick = startSession;
       card.appendChild(again);
     }
 
     var back = el('button', 'btn ghost block', '回到首页');
-    back.style.marginTop = '8px';
     back.onclick = function () { S.view = 'home'; S.session = null; render(); };
     card.appendChild(back);
 
