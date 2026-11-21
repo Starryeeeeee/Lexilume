@@ -144,6 +144,8 @@ HANDOVER.md           本文档
 10. 控制台跑 node 输出中文会显示 GBK 乱码，是显示问题不是数据问题
 11. **项目文件夹改名会让 Bash 工具瘫痪**（cwd 不存在 → spawn ENOENT，看起来像 cmd.exe 丢了）：2026-11-14 改名 lexilume 后踩过，解法是桌面留一个空 `wordbeat` 壳目录；`.git` 跟着文件夹走不会丢
 12. cmd 里 `node -e` 传含中文/嵌套引号的字符串会被搅乱 → 批量改 UTF-8 文件一律写成临时脚本文件执行，用完即删
+13. **纵向 flex 卡片里的独立控件会贴左**（2026-11-21 用户抓到）：`.qcard` 是 `flex-direction: column`，子项默认 `align-items: stretch`，给了固定宽度的控件（如朗读钮）就会靠左而不是居中——必须显式 `align-self: center`。新增控件后逐个检查横竖定位。
+14. **`git add -A` 会扫进别的进程的半成品**（2026-11-21 实际发生）：本仓库除网页外还有 Agnes 脚本在写 `scripts/` 与 `data/daily/`，且应用自身持续产生 sync 提交。提交只 `git add` 本次明确改动的文件，提交后 `git show --stat HEAD` 核对；push 前先 `git pull --rebase`（远端随时有 sync 提交）。
 
 ## 七、验证手段（改完必跑）
 
