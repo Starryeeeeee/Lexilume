@@ -316,6 +316,7 @@ h2.section {
   width: 48px;
   height: 48px;
   margin: 18px 0 30px;
+  align-self: center; /* qcard 是纵向 flex，独立控件必须显式居中，默认会贴左 */
 }
 .spellbox { display: flex; gap: 14px; }
 .spellbox input {
