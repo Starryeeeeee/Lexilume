@@ -146,16 +146,42 @@ HANDOVER.md           本文档
 12. cmd 里 `node -e` 传含中文/嵌套引号的字符串会被搅乱 → 批量改 UTF-8 文件一律写成临时脚本文件执行，用完即删
 13. **纵向 flex 卡片里的独立控件会贴左**（2026-11-21 用户抓到）：`.qcard` 是 `flex-direction: column`，子项默认 `align-items: stretch`，给了固定宽度的控件（如朗读钮）就会靠左而不是居中——必须显式 `align-self: center`。新增控件后逐个检查横竖定位。
 14. **`git add -A` 会扫进别的进程的半成品**（2026-11-21 实际发生）：本仓库除网页外还有 Agnes 脚本在写 `scripts/` 与 `data/daily/`，且应用自身持续产生 sync 提交。提交只 `git add` 本次明确改动的文件，提交后 `git show --stat HEAD` 核对；push 前先 `git pull --rebase`（远端随时有 sync 提交）。
+15. **`data/books-generated.js` 依赖 `data/books.js` 先建好 `WL.books`**（它直接 `WL.books.push`）：用 Node 提取「词 id → 单词」索引时必须共用同一个 `window` 并按顺序执行，逐个文件新建 window 会让生成词书全部丢失，索引从 9692 词缩到 207 词且不报错。
+16. **模型会把正文的双引号改成单引号**（2026-11-21）：例句校验不能直接 `in` 比对，要先归一化（去引号、统一破折号、折叠空白）再匹配，命中后用位置映射切回**原文**；否则一半例句会被误判成"编造"。
+17. **音标过滤别只放行 IPA 扩展区**：`æ`（U+00E6）在 Latin-1 补充区，白名单写 `\u0250-\u02ff` 会把它删掉，`transform` 就成了 `/trnsˈfɔːm/`。正确做法按 Unicode 类别放行所有字母。
+18. **难度的「一句一词」不能卡死**：模型天然爱从一条长句里抠 3 个词，强制 1 个会导致整批反复不过。放宽到 2，提示词仍要求尽量一句一词。
+19. **词表发布不要 `git push`**：网站每 20 多秒推一次 `progress.json`，本地 push 必冲突。用 Contents API 单文件提交（`scripts/daily_words/publish.py`），天然基于最新 HEAD，还自带幂等。
+20. **模型会把词性写成 `n. v.`**（空格分隔）：词性解析要按空白也切分，否则整条被判非法。
 
 ## 七、验证手段（改完必跑）
 
 ```bash
 node tools/selftest.js          # 48 项，全过才算动过核心
+python -m unittest discover -s scripts/tests -t .   # 每日时文词生成器 67 项
 ```
 
-2026-11-14 做过一轮浏览器端全流程实测（本地 http 服务 + 自动答题驱动），覆盖：学一个测一个、答错退回重考、复习段优先、拼写环节开始/跳过/错词重拼、结算对账、调度双通道落库。改会话流程时建议照此重测。注意：浏览器自动化工具（node_repl/IAB）不是每个会话都有；没有时靠 selftest + 用户网页验收。
+2026-11-14 做过一轮浏览器端全流程实测（本地 http 服务 + 自动答题驱动），覆盖：学一个测一个、答错退回重考、复习段优先、拼写环节开始/跳过/错词重拼、结算对账、调度双通道落库。改会话流程时建议照此重测。注意：浏览器自动化工具（node_repl/IAB）不一定有；没有时靠 selftest + 用户网页验收。
 
-## 八、下一步候选
+## 八、每日时文词自动化（2026-11-21 上线）
+
+目标：每天自动产出 `data/daily/<日期>.json`，网站「词表 → 每日时文词 → 检查并导入」变成一本独立词书。
+
+- 调度：`.github/workflows/daily-words.yml`，cron `0 22 * * *`（北京 06:00），并发组 `daily-words` 防撞车；`scripts-ci.yml` 在改动 `scripts/**` 时跑测试（3.10 / 3.12 双版本）
+- 代码：`scripts/daily_words/`，**零第三方依赖**（只用标准库），因此 CI 不需要 pip install，也不会因为某个包更新而挂
+  - `article.py` 选文（栏目优先、当天优先、260–1600 词、非视频图集）
+  - `htmltext.py` 正文抽取（`div#Content` → 兜底最长连续段落；未闭合 `<p>` 也能收）
+  - `learner.py` 学情（四档阈值与 `srs.js` 严格对齐）＋ 难度阶梯 ＋ 排除词（只保留正文中出现的，提示词才不会爆）
+  - `llm.py` Agnes 调用（`response_format=json_object`）＋ 校验失败回喂错误重写，最多 2 轮
+  - `validate.py` 契约闸门：单词、正文出现（派生词形）、音标、词性、释义长度、例句对齐、一句一词
+  - `publish.py` Contents API 提交（幂等、409/422 重试）＋失败开 issue
+  - `report.py` Step Summary
+- 幂等：远端已有当天文件直接退出，先于任何抓取，省 token 也防重复消耗
+- 模型：默认 `agnes-3.0-flash`（音标明显比 2.5 准），失败自动退 `agnes-2.5-flash`
+- 产物里多一个 `meta` 字段（模型/难度带/剔除原因/usage），前端 `parseDaily` 不读它，不破坏兼容
+
+**唯一需要人工做的**：仓库 Settings → Secrets 加 `AGNES_API_KEY`。没加时工作流会红并开 issue，不会静默失败。
+
+## 九、下一步候选
 
 - 其余功能待办看 `改进方向.md`（中断恢复、导入 CSV 转义、统计趋势、词条纠错、同步拆分等）
 - 题型扩展：听音辨义 / 语境填词接口已在 quiz.js，设置里把灰显行改成开关即可

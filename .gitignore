@@ -5,3 +5,8 @@ _p2.html
 _prof*/
 .DS_Store
 node_modules/
+
+# Python（每日时文词生成器）
+__pycache__/
+*.pyc
+.pytest_cache/

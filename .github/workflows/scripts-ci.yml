@@ -1,0 +1,32 @@
+name: 脚本测试
+
+# 只改前端时不必跑；动到生成器代码或工作流就自动验证
+on:
+  push:
+    paths:
+      - 'scripts/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: 单元测试
+        run: python -m unittest discover -s scripts/tests -t . -v
+      - name: 语法编译检查
+        run: python -m compileall -q scripts

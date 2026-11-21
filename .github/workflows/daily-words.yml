@@ -1,0 +1,92 @@
+name: 每日时文词
+
+# 北京时间 06:00 运行（UTC 22:00）。GitHub 的定时任务可能延迟几分钟到几十分钟，
+# 脚本内部统一用 Asia/Shanghai 计算「今天」，不受 runner 时区影响。
+on:
+  schedule:
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: '目标日期 YYYY-MM-DD（留空 = 北京时间今天）'
+        required: false
+        type: string
+      article_url:
+        description: '指定文章 URL（选文失败时补救用）'
+        required: false
+        type: string
+      model:
+        description: 'Agnes 模型（留空用仓库变量或 agnes-3.0-flash）'
+        required: false
+        type: string
+      force:
+        description: '覆盖已存在的当天文件'
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: '只生成、不写仓库（排障）'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write   # 通过 Contents API 提交 data/daily/<日期>.json
+  issues: write     # 失败时开 issue 告警
+
+# 同一时间只允许一个实例，避免定时任务与手动触发撞车
+concurrency:
+  group: daily-words
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 准备 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 环境自检
+        run: |
+          node --version || echo "警告：没有 node，已斩/已掌握词的排除会降级"
+          python --version
+
+      - name: 跑单元测试（不联网）
+        run: python -m unittest discover -s scripts/tests -t . -v
+
+      - name: 生成并发布
+        env:
+          AGNES_API_KEY: ${{ secrets.AGNES_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AGNES_MODEL: ${{ inputs.model || vars.AGNES_MODEL || 'agnes-3.0-flash' }}
+          DW_DEBUG: '1'
+          IN_DATE: ${{ inputs.date }}
+          IN_URL: ${{ inputs.article_url }}
+          IN_FORCE: ${{ inputs.force }}
+          IN_DRY: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          ARGS=()
+          if [ -n "${IN_DATE:-}" ]; then ARGS+=(--date "$IN_DATE"); fi
+          if [ -n "${IN_URL:-}" ]; then ARGS+=(--url "$IN_URL"); fi
+          if [ "${IN_FORCE:-false}" = "true" ]; then ARGS+=(--force); fi
+          if [ "${IN_DRY:-false}" = "true" ]; then ARGS+=(--dry-run); fi
+          echo "运行参数：${ARGS[*]:-（默认）}"
+          python -m scripts.daily_words "${ARGS[@]}"
+
+      - name: 留存产物（排障用，7 天）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-words-${{ github.run_id }}
+          path: data/daily/*.json
+          if-no-files-found: ignore
+          retention-days: 7

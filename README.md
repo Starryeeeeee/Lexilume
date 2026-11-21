@@ -70,6 +70,28 @@ word, 音标, 词性, 释义, 例句, 例句翻译
 
 音标、词性、例句、例句翻译都可以留空，只写 `word, 释义` 也能导入。
 
+## 每日时文词（自动生成）
+
+每天北京时间 06:00，GitHub Actions 会从 China Daily 抓一篇时文，交给 Agnes 按你当前的
+学习进度挑 10–15 个词，校验后写进仓库 `data/daily/<日期>.json`；在网站「词表」页点
+「检查并导入」即可变成一本独立的时文词书。完整契约见 `AGNES.md`。
+
+首次启用需要两步（都在 GitHub 网页上）：
+
+1. Settings → Secrets and variables → Actions → New repository secret，名字填 `AGNES_API_KEY`，
+   值填 Agnes 平台的 Key。
+2. Actions 页面若提示工作流被禁用，点 `I understand my workflows, go ahead and enable them`。
+
+日常不需要管。想补某一天或换一篇文章：Actions → 每日时文词 → Run workflow，
+可填日期、文章 URL，勾 `force` 覆盖当天。失败会自己开一个 `daily-words` 标签的 issue。
+
+本地演练（不发布、不消耗仓库）：
+
+```bash
+AGNES_API_KEY=你的key python -m scripts.daily_words --dry-run
+python -m unittest discover -s scripts/tests -t .
+```
+
 ## 目录
 
 ```
@@ -87,6 +109,10 @@ sw.js                 离线缓存（改资源后记得 bump CACHE 版本号）
 tools/selftest.js     核心逻辑自检：node tools/selftest.js
 tools/build-books.js  大词书重新生成（需先下载源数据，见文件头说明）
 tools/make-icons.js   重新生成图标
+scripts/daily_words/  每日时文词生成器（纯标准库 Python）
+scripts/tests/        生成器单元测试
+.github/workflows/    定时任务与脚本测试
+data/daily/           每日时文词 JSON（生成器写入，网站读取）
 ```
 
 ## 数据
