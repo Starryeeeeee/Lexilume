@@ -311,16 +311,30 @@ h2.section {
 .speak:hover { box-shadow: none; }
 .speak:active { box-shadow: var(--press-xs); }
 
-/* 拼写页的裸音频图标：视觉同图标，命中区 44px */
-.spell-audio .speak-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--accent-deep);
-  padding: 11px;
-  margin: -11px;
+/* ---------- 拼写卡 ---------- */
+.spell-speak {
+  width: 48px;
+  height: 48px;
+  margin: 18px 0 30px;
 }
+.spellbox { display: flex; gap: 14px; }
+.spellbox input {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  border-radius: 14px;
+  padding: 0 18px;
+  font-size: 19px;
+  font-family: Georgia, "Times New Roman", serif;
+  caret-color: var(--accent);
+  box-shadow: var(--press-sm);
+  transition: box-shadow var(--t);
+}
+.spellbox input::placeholder { color: var(--ink-2); }
+.spellbox input:focus { box-shadow: var(--press-xs); }
+.spellbox input.right { box-shadow: var(--press-xs); color: #22664E; }
+.spellbox input.wrong { box-shadow: var(--press-xs); color: #94403A; }
+.spell-ok { flex: none; width: 96px; height: 52px; padding: 0; font-size: 16px; }
 
 /* ---------- 选项 ---------- */
 .options { display: grid; gap: 14px; margin-top: 28px; }
@@ -368,21 +382,6 @@ h2.section {
 }
 .opt.wrong .key { box-shadow: none; color: #94403A; }
 .opt.dim { opacity: 0.42; box-shadow: none; }
-
-/* ---------- 拼写框（预留） ---------- */
-.spellbox { margin-top: 28px; display: flex; gap: 14px; }
-.spellbox input {
-  flex: 1;
-  border-radius: 14px;
-  padding: 15px 18px;
-  font-size: 19px;
-  font-family: Georgia, "Times New Roman", serif;
-  box-shadow: var(--press-sm);
-  transition: box-shadow var(--t);
-}
-.spellbox input:focus { box-shadow: var(--press-xs); }
-.spellbox input.right { box-shadow: var(--press-xs); color: #22664E; }
-.spellbox input.wrong { box-shadow: var(--press-xs); color: #94403A; }
 
 /* ---------- 反馈 ---------- */
 .feedback {

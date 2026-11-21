@@ -1193,9 +1193,12 @@ window.WL = window.WL || {};
     }
 
     var card = el('div', 'qcard');
-    var chip = el('div', 'chip', q.label);
-    chip.style.marginBottom = '18px';
-    card.appendChild(chip);
+    // 拼写阶段页头已标明「拼写」，题面只剩释义与输入，不再挂题型标签
+    if (q.type !== 'spell') {
+      var chip = el('div', 'chip', q.label);
+      chip.style.marginBottom = '18px';
+      card.appendChild(chip);
+    }
 
     var prompt = el('div', 'qprompt');
     if (q.type === 'en2cn' || q.type === 'audio2cn') {
@@ -1229,10 +1232,11 @@ window.WL = window.WL || {};
     }
 
     if (q.type === 'spell') {
-      // 拼写模式：只显示中文释义，单词音频在出题时自动播放；读音图标兼作提示
-      var replay = el('span', 'speak-icon');
-      replay.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
-      replay.onclick = function (e) {
+      // 拼写：中文释义是题面，读音是唯一线索，输入是唯一动作
+      var hear = el('button', 'speak spell-speak');
+      hear.title = '重听读音';
+      hear.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+      hear.onclick = function (e) {
         e.stopPropagation();
         WL.quiz.speak(word.w, true);
         // 重听后把焦点还给输入框，纠正重拼不丢焦点
@@ -1241,10 +1245,7 @@ window.WL = window.WL || {};
           if (inp && !inp.disabled && !s.answered) inp.focus();
         }, 150);
       };
-      var raWrap = el('div', 'spell-audio');
-      raWrap.appendChild(replay);
-      card.appendChild(raWrap);
-
+      card.appendChild(hear);
 
       // 拼错过：就地亮出正确拼写，听读音后重新拼，不跳下一词
       if (s.spellMissed) {
@@ -1255,10 +1256,11 @@ window.WL = window.WL || {};
       var input = el('input');
       input.type = 'text';
       input.placeholder = '输入单词';
+      input.enterkeyhint = 'go';
       input.autocomplete = 'off';
       input.autocapitalize = 'off';
       input.spellcheck = false;
-      var submit = el('button', 'btn primary', '确认');
+      var submit = el('button', 'btn primary spell-ok', '确认');
       var doSubmit = function () {
         if (input.value.trim() === '') return;
         answerSpell(input.value);
@@ -1279,7 +1281,6 @@ window.WL = window.WL || {};
       } else {
         setTimeout(function () { if (document.body.contains(input)) input.focus(); }, 30);
       }
-      card.appendChild(qFoot('输入后回车确认'));
       return card;
     }
 
