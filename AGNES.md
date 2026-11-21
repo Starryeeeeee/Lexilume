@@ -8,7 +8,7 @@
 
 | 项目 | 值 |
 | --- | --- |
-| 触发 | GitHub Actions，每天 UTC 22:00（北京时间 06:00）；支持手动触发 |
+| 触发 | GitHub Actions，每天 UTC 22:00 / 23:30（北京时间 06:00 / 07:30）；第二次是幂等兜底，支持手动触发 |
 | 手动触发入口 | Actions → 每日时文词 → Run workflow，可指定日期 / 文章 URL / 模型 / 强制覆盖 / 只演练 |
 | 时区 | 一律按 Asia/Shanghai 算「今天」，不看 runner 的 UTC 日期 |
 | 模型 | 默认 `agnes-3.0-flash`，失败自动退到 `agnes-2.5-flash` |

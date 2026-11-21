@@ -81,6 +81,51 @@ def article_from_file(path: str, url: str) -> article_mod.Article:
     )
 
 
+def _choose_article(ctx, date_str: str, args, tried: list[str]) -> article_mod.Article:
+    """选一篇稿件：本地文件 / 指定 URL / 自动挑选（跳过已试过的）。"""
+    if args.offline_article:
+        art = article_from_file(args.offline_article, args.url or "")
+        ctx.log(f"使用本地稿件：{art.title}（{art.words} 词）")
+    elif args.url:
+        art = article_mod.fetch_article(args.url, "")
+        ctx.log(f"使用指定稿件：{art.title}（{art.words} 词）")
+    else:
+        art = article_mod.pick(config.parse_date(date_str), log=ctx.log, exclude=set(tried))
+        ctx.log(f"选中：{art.title}（{art.words} 词）\n  {art.url}")
+
+    if art.words < config.MIN_BODY_WORDS:
+        raise article_mod.NoArticleError(f"稿件过短（{art.words} 词）：{art.url}")
+    return art
+
+
+def _generate_with_models(ctx, art, profile, exclusions, date_str, count, ratio_text, args):
+    """先用首选模型，失败再退到备用模型；两者都失败才抛异常。"""
+    def run(client):
+        return llm.select_words(
+            client, art, profile, exclusions,
+            date=date_str, count=count, ratio_text=ratio_text, log=ctx.log,
+        )
+
+    client = llm.AgnesClient(model=args.model)
+    fallback = config.AGNES_FALLBACK_MODEL
+    try:
+        return client, run(client)
+    except Exception as exc:  # noqa: BLE001
+        if os.environ.get("DW_DEBUG"):
+            ctx.log(traceback.format_exc())
+        if not fallback or fallback == client.model:
+            raise
+        ctx.log(f"{client.model} 失败（{str(exc)[:200]}），改用备用模型 {fallback} 再试一次")
+
+    client = llm.AgnesClient(model=fallback)
+    try:
+        return client, run(client)
+    except Exception as exc2:  # noqa: BLE001
+        if os.environ.get("DW_DEBUG"):
+            ctx.log(traceback.format_exc())
+        raise llm.AgnesError(f"{client.model} 仍失败：{exc2}") from exc2
+
+
 def main(argv=None) -> int:
     _setup_stdout()
     args = parse_args(argv)
@@ -143,71 +188,49 @@ def main(argv=None) -> int:
     if not index:
         ctx.log("提示：拿不到词 id 索引（node 缺失或词库不可读），已斩/已掌握排除会降级")
 
-    # ---------------------------------------------------------- 3. 选文
-    today = config.parse_date(date)
-    try:
-        if args.offline_article:
-            art = article_from_file(args.offline_article, args.url or "")
-            ctx.log(f"使用本地稿件：{art.title}（{art.words} 词）")
-        elif args.url:
-            art = article_mod.fetch_article(args.url, "")
-            ctx.log(f"使用指定稿件：{art.title}（{art.words} 词）")
-        else:
-            art = article_mod.pick(today, log=ctx.log)
-            ctx.log(f"选中：{art.title}（{art.words} 词）\n  {art.url}")
-    except Exception as exc:  # noqa: BLE001
-        ctx.log(f"选文失败：{exc}")
-        ctx.info["result"] = "no-article"
-        report.emit(ctx, root, failed=True)
-        _notify_failure(date, "\n".join(ctx.lines), root)
-        return EXIT_FAIL
-
-    if art.words < config.MIN_BODY_WORDS:
-        ctx.log(f"稿件正文过短（{art.words} 词），放弃")
-        ctx.info["result"] = "short-article"
-        report.emit(ctx, root, failed=True)
-        _notify_failure(date, "\n".join(ctx.lines), root)
-        return EXIT_FAIL
-
-    # ---------------------------------------------------------- 4. 排除词
-    exclusions = learner.build_exclusions(profile, history, art.body)
-    ctx.log(
-        "排除词（仅统计正文中出现的）：已斩 {} / 已掌握 {} / 近期 {}".format(
-            len(exclusions["cut"]), len(exclusions["mastered"]), len(exclusions["recent"])
-        )
-    )
-
-    # ---------------------------------------------------------- 5. 生成
-    def fail(reason: str) -> int:
+    # ---------------------------------------------------------- 3/4/5. 选文 → 排除 → 生成
+    def fail(reason: str, status: str = "llm-failed") -> int:
         ctx.log(f"生成失败：{reason}")
-        ctx.info["result"] = "llm-failed"
+        ctx.info["result"] = status
         report.emit(ctx, root, failed=True)
         _notify_failure(date, "\n".join(ctx.lines), root)
         return EXIT_FAIL
 
-    client = llm.AgnesClient(model=args.model)
-    try:
-        selection = llm.select_words(
-            client, art, profile, exclusions,
-            date=date, count=count, ratio_text=ratio_text, log=ctx.log,
-        )
-    except Exception as exc:  # noqa: BLE001
-        if os.environ.get("DW_DEBUG"):
-            ctx.log(traceback.format_exc())
-        fallback = config.AGNES_FALLBACK_MODEL
-        if not fallback or fallback == client.model:
-            return fail(str(exc))
-        ctx.log(f"{client.model} 失败（{str(exc)[:200]}），改用备用模型 {fallback} 再试一次")
-        client = llm.AgnesClient(model=fallback)
+    max_rounds = 1 if (args.url or args.offline_article) else 2
+    tried: list[str] = []
+    selection = None
+    client = None
+    art = None
+    exclusions: dict = {}
+
+    for round_no in range(1, max_rounds + 1):
         try:
-            selection = llm.select_words(
-                client, art, profile, exclusions,
-                date=date, count=count, ratio_text=ratio_text, log=ctx.log,
+            art = _choose_article(ctx, date, args, tried)
+        except Exception as exc:  # noqa: BLE001
+            ctx.log(f"选文失败：{exc}")
+            return fail(str(exc), status="no-article")
+        tried.append(art.url)
+
+        exclusions = learner.build_exclusions(profile, history, art.body)
+        ctx.log(
+            "排除词（仅统计正文中出现的）：已斩 {} / 已掌握 {} / 近期 {}".format(
+                len(exclusions["cut"]), len(exclusions["mastered"]), len(exclusions["recent"])
             )
-        except Exception as exc2:  # noqa: BLE001
-            if os.environ.get("DW_DEBUG"):
-                ctx.log(traceback.format_exc())
-            return fail(f"{client.model} 仍失败：{exc2}")
+        )
+
+        try:
+            client, selection = _generate_with_models(
+                ctx, art, profile, exclusions, date, count, ratio_text, args
+            )
+            break
+        except Exception as exc:  # noqa: BLE001
+            ctx.log(f"第 {round_no} 篇稿件生成失败：{exc}")
+            if round_no >= max_rounds:
+                return fail(f"{round_no} 篇稿件都没能产出合格词表：{exc}")
+            ctx.log("换一篇稿件再试（同一篇重试大概率还是同样的结果）")
+
+    if selection is None or client is None or art is None:
+        return fail("没有可用词表")
 
     # ---------------------------------------------------------- 6. 组装
     book = selection.book
@@ -221,6 +244,7 @@ def main(argv=None) -> int:
         "challengeRatio": ratio_text,
         "articleWords": art.words,
         "articlePublished": art.published,
+        "attemptedArticles": tried,
         "probes": len(art.probes) or None,
         "repairRounds": max(0, len(selection.attempts) - 1),
         "usage": selection.usage or None,

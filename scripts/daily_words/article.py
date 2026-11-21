@@ -110,11 +110,15 @@ def fetch_article(url: str, published: str) -> Article:
     )
 
 
-def pick(today, *, log=print) -> Article:
-    """选出一篇合格稿件；都不合格时抛 NoArticleError 并带上诊断信息。"""
-    candidates = collect_candidates(today)
+def pick(today, *, log=print, exclude: set | None = None) -> Article:
+    """选出一篇合格稿件；都不合格时抛 NoArticleError 并带上诊断信息。
+
+    exclude：已经试过的 URL（换稿重试时用）。
+    """
+    exclude = exclude or set()
+    candidates = [c for c in collect_candidates(today) if c[0] not in exclude]
     if not candidates:
-        raise NoArticleError("列表页没有抓到当天稿件链接（可能改版或被拦截）")
+        raise NoArticleError("列表页没有抓到当天稿件链接（可能改版或被拦截，或候选都已试过）")
 
     # 优先当天稿件，其次前一天；同一天内保持列表页顺序（确定性）
     candidates = sorted(candidates, key=lambda item: item[1], reverse=True)

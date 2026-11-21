@@ -176,8 +176,13 @@ python -m unittest discover -s scripts/tests -t .   # 每日时文词生成器 6
   - `publish.py` Contents API 提交（幂等、409/422 重试）＋失败开 issue
   - `report.py` Step Summary
 - 幂等：远端已有当天文件直接退出，先于任何抓取，省 token 也防重复消耗
+- 兜底：每天跑两次（06:00 / 07:30，第二次幂等秒退）；单次内先用 3.0、失败退 2.5；
+  仍失败就换第二篇稿件重试（同一篇重试大概率同样的结果）。三档叠加后断更概率很低
 - 模型：默认 `agnes-3.0-flash`（音标明显比 2.5 准），失败自动退 `agnes-2.5-flash`
-- 产物里多一个 `meta` 字段（模型/难度带/剔除原因/usage），前端 `parseDaily` 不读它，不破坏兼容
+- 产物里多一个 `meta` 字段（模型/难度带/剔除原因/试过的稿件/usage），前端 `parseDaily` 不读它，不破坏兼容
+- **未验证的风险**：GitHub runner（美国）能否直连 `www.chinadaily.com.cn` 尚未实测——本机在境内，
+  测了不算数。若首次定时运行失败，issue 里会写清楚；补救要么等它自己重试，要么手动触发并填
+  `article_url`（任意一篇 China Daily 稿件链接），要么把 `ARTICLE_SOURCES` 换成可达的镜像
 
 **唯一需要人工做的**：仓库 Settings → Secrets 加 `AGNES_API_KEY`。没加时工作流会红并开 issue，不会静默失败。
 

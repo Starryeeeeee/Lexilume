@@ -1,8 +1,10 @@
 """正文抽取与选文解析测试（纯离线，不访问网络）。"""
 
 import unittest
+from datetime import datetime
+from unittest import mock
 
-from scripts.daily_words import article, htmltext
+from scripts.daily_words import article, config, htmltext
 
 PAGE = """
 <html><head><title>Test Headline - Chinadaily.com.cn</title></head>
@@ -86,6 +88,35 @@ class LinkParseTest(unittest.TestCase):
             with self.subTest(title=title):
                 self.assertTrue(article._SKIP_TITLE_RE.search(title))
         self.assertFalse(article._SKIP_TITLE_RE.search("Foreigners win 2026 Orchid Awards"))
+
+
+class PickTest(unittest.TestCase):
+    """pick 的换稿重试契约：已试过的 URL 不再返回。"""
+
+    @staticmethod
+    def _article(url):
+        return article.Article(
+            url=url, title="A normal headline", body="word " * 300,
+            paragraphs=["para " * 20] * 5, words=300, published="2026-11-21",
+        )
+
+    def test_exclude_skips_tried(self):
+        today = datetime(2026, 11, 21, tzinfo=config.CN_TZ)
+        candidates = [("https://x/1", "2026-11-21"), ("https://x/2", "2026-11-21")]
+        with mock.patch.object(article, "collect_candidates", return_value=candidates), \
+             mock.patch.object(article, "fetch_article", side_effect=lambda url, pub: self._article(url)):
+            self.assertEqual(article.pick(today, log=lambda *_: None).url, "https://x/1")
+            self.assertEqual(
+                article.pick(today, log=lambda *_: None, exclude={"https://x/1"}).url,
+                "https://x/2",
+            )
+
+    def test_all_excluded_raises(self):
+        today = datetime(2026, 11, 21, tzinfo=config.CN_TZ)
+        candidates = [("https://x/1", "2026-11-21")]
+        with mock.patch.object(article, "collect_candidates", return_value=candidates):
+            with self.assertRaises(article.NoArticleError):
+                article.pick(today, log=lambda *_: None, exclude={"https://x/1"})
 
 
 if __name__ == "__main__":
