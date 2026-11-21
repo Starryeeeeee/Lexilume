@@ -1171,6 +1171,18 @@ window.WL = window.WL || {};
     else enterLearnPhase();
   }
 
+  // 题目卡上的重听按钮：位置固定在音标左侧，与学习词卡一致
+  function speakBtn(word) {
+    var sp = el('button', 'speak');
+    sp.title = '重听读音';
+    sp.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+    sp.onclick = function (e) {
+      e.stopPropagation();
+      WL.quiz.speak(word.w, true);
+    };
+    return sp;
+  }
+
   function questionCard(word) {
     var s = S.session;
     var q = s.q;
@@ -1183,21 +1195,9 @@ window.WL = window.WL || {};
     }
 
     var card = el('div', 'qcard');
-    var head = el('div', 'qhead');
-    head.appendChild(el('div', 'chip', q.label));
-    // 常驻重听：复习时想再听一遍不必等下一题；听音辨义与拼写有自己的朗读入口，不重复放
-    if (q.type !== 'audio2cn' && q.type !== 'spell') {
-      var spk = el('button', 'speak qhead-speak');
-      spk.title = '重听读音';
-      spk.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
-      spk.onclick = function (e) {
-        e.stopPropagation();
-        WL.quiz.speak(word.w, true);
-      };
-      head.appendChild(spk);
-    }
-    head.style.marginBottom = '18px';
-    card.appendChild(head);
+    var chip = el('div', 'chip', q.label);
+    chip.style.marginBottom = '18px';
+    card.appendChild(chip);
 
     var prompt = el('div', 'qprompt');
     if (q.type === 'en2cn' || q.type === 'audio2cn') {
@@ -1216,17 +1216,18 @@ window.WL = window.WL || {};
     }
     card.appendChild(prompt);
 
-    if (q.sub && q.type !== 'spell') {
-      var sub = el('div', 'qsub');
-      if (q.type === 'audio2cn') {
-        var btn = el('button', 'btn ghost', '再听一次');
-        btn.onclick = function () { WL.quiz.speak(word.w, true); };
-        card.appendChild(btn);
-        sub.textContent = '';
-      } else {
-        sub.textContent = q.sub;
-      }
-      if (sub.textContent) card.appendChild(sub);
+    // 副行：听音辨义给「再听一次」，看词选义给「喇叭 + 音标」，其余显示释义/译文
+    if (q.type === 'audio2cn') {
+      var btn = el('button', 'btn ghost', '再听一次');
+      btn.onclick = function () { WL.quiz.speak(word.w, true); };
+      card.appendChild(btn);
+    } else if (q.type === 'en2cn') {
+      var phRow = el('div', 'qsub-ph');
+      phRow.appendChild(speakBtn(word));
+      if (q.sub) phRow.appendChild(el('span', null, q.sub));
+      card.appendChild(phRow);
+    } else if (q.type !== 'spell' && q.sub) {
+      card.appendChild(el('div', 'qsub', q.sub));
     }
 
     if (q.type === 'spell') {

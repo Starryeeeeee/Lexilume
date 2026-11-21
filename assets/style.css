@@ -215,18 +215,16 @@ h2.section {
   box-shadow: var(--press-xs);
 }
 
-/* 题头：题型标签居中，重听按钮贴右上角，始终在场不挤动版面 */
-.qhead {
-  position: relative;
+/* 题卡音标行：喇叭在音标左侧，与学习词卡同一排法 */
+.qsub-ph {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 34px;
-}
-.qhead-speak {
-  position: absolute;
-  right: -8px;
-  top: 0;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--ink-3);
+  font-size: 14px;
+  letter-spacing: 0.02em;
 }
 
 /* ---------- 题目卡 ---------- */
