@@ -19,6 +19,10 @@ window.WL = window.WL || {};
   // 练习模式的范围与题型选择（页面重渲染间保持）
   var practiceSel = { scope: 'all', mode: 'en2cn' };
 
+  // 首页「新学」的加量询问（当天配额用完后才出现）
+  var extraAsk = false;
+  var extraCount = 10;
+
   function getBook(id) {
     if (bookCache[id]) return bookCache[id];
     var books = WL.books || [];
@@ -101,8 +105,10 @@ window.WL = window.WL || {};
   /* ============ 会话 ============ */
 
   // mode: 'all' 复习+新学 | 'review' 只复习 | 'new' 只新学
-  function startSession(mode) {
+  // extraNew：加学数量，仅当用户在配额用完后主动选择时传入
+  function startSession(mode, extraNew) {
     mode = mode || 'all';
+    extraAsk = false;
     var cfg = WL.store.getConfig();
     var book = curBook();
     if (!book) return;
@@ -123,7 +129,8 @@ window.WL = window.WL || {};
 
     var fresh = mode === 'review' ? [] : book.words.filter(function (w) { return !prog[w.id]; });
     if (cfg.shuffleNew) fresh = WL.quiz.shuffle(fresh);
-    fresh = fresh.slice(0, cfg.newLimit);
+    // extraNew：配额用完后用户主动选择的加学数量，仅本次会话生效
+    fresh = fresh.slice(0, extraNew || cfg.newLimit);
 
     if (!due.length && !fresh.length) {
       toast(mode === 'review' ? '当前没有到期复习的词' : '当前没有要学的内容，可以先导入词表');
@@ -849,9 +856,14 @@ window.WL = window.WL || {};
     var startCard = el('div', 'card');
     var dueLimited = Math.min(dueN, cfg.reviewLimit);
     var nextNew = Math.min(cfg.newLimit, total - learned);
-    var estMin = Math.max(1, Math.round((dueLimited * 15 + nextNew * 40) / 60));
-    var estText = dueLimited + nextNew > 0
-      ? '复习 ' + dueLimited + ' 个 · 新学 ' + nextNew + ' 个 · 约 ' + estMin + ' 分钟'
+    var quotaDone = today.nw >= cfg.newLimit;
+    var newCount = quotaDone ? 0 : nextNew;
+    var estMin = Math.max(1, Math.round((dueLimited * 15 + newCount * 40) / 60));
+    var estParts = [];
+    if (dueLimited) estParts.push('复习 ' + dueLimited + ' 个');
+    estParts.push(quotaDone ? '新学配额已完成' : '新学 ' + nextNew + ' 个');
+    var estText = dueLimited + newCount > 0
+      ? estParts.join(' · ') + ' · 约 ' + estMin + ' 分钟'
       : '今天没有待学内容';
     startCard.appendChild(h(
       '<div class="spread" style="margin-bottom:14px">' +
@@ -868,9 +880,39 @@ window.WL = window.WL || {};
     goRow.appendChild(ro);
     var go = el('button', 'btn primary lg btn-go', '新学');
     go.disabled = !nextNew;
-    go.onclick = function () { startSession('new'); };
+    go.onclick = function () {
+      // 当天配额已用完：先问清楚要加学几个，而不是默默再塞一组
+      if (WL.store.getToday().nw >= cfg.newLimit) {
+        extraAsk = true;
+        render();
+        return;
+      }
+      startSession('new');
+    };
     goRow.appendChild(go);
     startCard.appendChild(goRow);
+
+    // 加量询问面板：只在配额用完且点了「新学」后出现
+    if (extraAsk) {
+      var freshLeft = 0;
+      book.words.forEach(function (w) { if (!prog[w.id]) freshLeft++; });
+      var ask = el('div', 'extra-ask');
+      ask.appendChild(h('<div class="small muted" style="margin-bottom:12px">今天已新学 <b>' +
+        WL.store.getToday().nw + '</b> 个，达到上限。再学几个？（词表还剩 ' + freshLeft + ' 个新词）</div>'));
+      ask.appendChild(segGroup(
+        [[10, '10 个'], [20, '20 个'], [30, '30 个'], [50, '50 个']],
+        extraCount, function (v) { extraCount = v; render(); }
+      ));
+      var askRow = el('div', 'learn-actions');
+      var askCancel = el('button', 'btn lg btn-go', '取消');
+      askCancel.onclick = function () { extraAsk = false; render(); };
+      askRow.appendChild(askCancel);
+      var askGo = el('button', 'btn primary lg btn-go', '开始加学');
+      askGo.onclick = function () { startSession('new', extraCount); };
+      askRow.appendChild(askGo);
+      ask.appendChild(askRow);
+      startCard.appendChild(ask);
+    }
 
     if (dueN > cfg.reviewLimit) {
       startCard.appendChild(h('<div class="small muted" style="margin-top:10px">另有 ' + (dueN - cfg.reviewLimit) +

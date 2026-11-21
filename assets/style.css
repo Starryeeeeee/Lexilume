@@ -336,6 +336,17 @@ h2.section {
 .spellbox input.wrong { box-shadow: var(--press-xs); color: #94403A; }
 .spell-ok { flex: none; width: 96px; height: 52px; padding: 0; font-size: 16px; }
 
+/* 加量询问：当天新学配额用完后，再点「新学」时出现 */
+.extra-ask {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  box-shadow: var(--press-xs);
+  text-align: left;
+}
+.extra-ask .seg { margin-bottom: 16px; }
+.extra-ask b { font-weight: 600; color: var(--accent-deep); }
+
 /* ---------- 选项 ---------- */
 .options { display: grid; gap: 14px; margin-top: 28px; }
 .opt {
