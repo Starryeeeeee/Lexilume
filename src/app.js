@@ -972,20 +972,9 @@ window.WL = window.WL || {};
 
     if (s.phase === 'spell' && !s.retryCard) {
       var exit = el('div', 'study-exit');
-      var cutBtn = el('button', 'btn ghost');
-      cutBtn.textContent = '斩';
+      var cutBtn = el('button', 'btn ghost', '斩');
       cutBtn.title = '斩：这个词不再进入后续复习';
-      cutBtn.onclick = function () {
-        var cur = currentItem();
-        if (!cur) return;
-        var w = wordOf(cur.wid);
-        if (!w) return;
-        markCut(cur.wid, w);
-        s.items = s.items.filter(function (it, idx) { return idx <= s.i || it.wid !== cur.wid; });
-        s.total = s.items.length;
-        toast('已斩「' + w.w + '」，不再进入复习');
-        render();
-      };
+      cutBtn.onclick = cutCurrent;
       exit.appendChild(cutBtn);
       var skip = el('button', 'btn ghost');
       skip.textContent = '跳过剩余拼写，完成今日学习';
@@ -994,24 +983,21 @@ window.WL = window.WL || {};
       wrap.appendChild(exit);
     }
 
+    if (s.phase === 'review') {
+      var exitR = el('div', 'study-exit');
+      var cutR = el('button', 'btn ghost', '斩');
+      cutR.title = '斩：这个词不再进入后续复习';
+      cutR.onclick = cutCurrent;
+      exitR.appendChild(cutR);
+      wrap.appendChild(exitR);
+    }
+
     if (s.phase === 'practice' && !s.retryCard) {
       var exit2 = el('div', 'study-exit');
-      var cutBtn = el('button', 'btn ghost');
-      cutBtn.textContent = '斩';
-      cutBtn.title = '斩：这个词不再进入后续复习';
-      cutBtn.onclick = function () {
-        var cur = currentItem();
-        if (!cur) return;
-        var w = wordOf(cur.wid);
-        if (!w) return;
-        markCut(cur.wid, w);
-        // 本轮练习的剩余队列里也移除该词
-        s.items = s.items.filter(function (it, idx) { return idx <= s.i || it.wid !== cur.wid; });
-        s.total = s.items.length;
-        toast('已斩「' + w.w + '」，不再进入复习');
-        render();
-      };
-      exit2.appendChild(cutBtn);
+      var cutBtn2 = el('button', 'btn ghost', '斩');
+      cutBtn2.title = '斩：这个词不再进入后续复习';
+      cutBtn2.onclick = cutCurrent;
+      exit2.appendChild(cutBtn2);
       var quit = el('button', 'btn ghost');
       quit.textContent = '结束练习';
       quit.onclick = finishPractice;
@@ -1141,6 +1127,38 @@ window.WL = window.WL || {};
     WL.store.putProgress(s.bookId, wid, st);
     WL.store.flush();
     if (WL.sync) WL.sync.markDirty();
+  }
+
+  // 斩当前这道题：打标记、从本轮队列移除、直接跳到下一题
+  // 复习 / 练习 / 拼写共用，避免三处各写一套还各自漏掉「跳过」这一步
+  function cutCurrent() {
+    var s = S.session;
+    var cur = currentItem();
+    if (!s || !cur) return;
+    var w = wordOf(cur.wid);
+    if (!w) return;
+
+    markCut(cur.wid, w);
+
+    // 清掉作答态，顺带拦住在途的自动跳题定时器
+    s.retryCard = false;
+    s.q = null;
+    s.answered = null;
+    s.i++;
+    // 队列里这个词的重复项一并移除，已经走过的题保留
+    s.items = s.items.filter(function (it, idx) {
+      return idx < s.i || it.wid !== cur.wid;
+    });
+    s.total = s.items.length;
+
+    toast('已斩「' + w.w + '」，不再进入复习');
+
+    if (s.i >= s.items.length) {
+      queueDrained();
+      return;
+    }
+    prepare();
+    render();
   }
 
   // 斩：确认掌握的词打上标记，后续不再进入复习；本词也跳过测验
