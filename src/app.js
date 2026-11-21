@@ -383,8 +383,14 @@ window.WL = window.WL || {};
     s.spellMissed = false;
     s.itemGraded = false;
 
-    if (type === 'audio2cn') WL.quiz.speak(word.w, cfg.sound);
-    if (type === 'spell') WL.quiz.speak(word.w, cfg.sound);
+    // 换题先掐掉上一题的尾音
+    WL.quiz.stop();
+
+    // 自动朗读：听音辨义与拼写本来就要念；
+    // 复习/练习里的「看词选义」英文已经摆在屏幕上，念出来不泄露答案
+    var autoSound = type === 'audio2cn' || type === 'spell' ||
+      (type === 'en2cn' && (cur.from === 'review' || cur.from === 'practice'));
+    if (autoSound) WL.quiz.speak(word.w, cfg.sound);
   }
 
   // 答对：只让选项变绿，随即进入下一题，不再追加任何反馈条
@@ -397,6 +403,11 @@ window.WL = window.WL || {};
     s.answered = { idx: idx, ok: ok };
     s.answeredAt = Date.now();
     grade(ok);
+    // 揭晓后补一声读音：看义选词/语境填词的英文原本是藏着的，
+    // 先出声会直接把答案念出来，所以放到作答之后
+    if (s.q.type === 'cn2en' || s.q.type === 'cloze') {
+      WL.quiz.speak(s.q.word.w, WL.store.getConfig().sound);
+    }
     render();
     if (ok) {
       // 答对后停留久一点，让用户读完各选项对应的单词与释义；点击任意选项可提前继续
@@ -1154,9 +1165,21 @@ window.WL = window.WL || {};
     }
 
     var card = el('div', 'qcard');
-    var chip = el('div', 'chip', q.label);
-    chip.style.marginBottom = '18px';
-    card.appendChild(chip);
+    var head = el('div', 'qhead');
+    head.appendChild(el('div', 'chip', q.label));
+    // 常驻重听：复习时想再听一遍不必等下一题；听音辨义与拼写有自己的朗读入口，不重复放
+    if (q.type !== 'audio2cn' && q.type !== 'spell') {
+      var spk = el('button', 'speak qhead-speak');
+      spk.title = '重听读音';
+      spk.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+      spk.onclick = function (e) {
+        e.stopPropagation();
+        WL.quiz.speak(word.w, true);
+      };
+      head.appendChild(spk);
+    }
+    head.style.marginBottom = '18px';
+    card.appendChild(head);
 
     var prompt = el('div', 'qprompt');
     if (q.type === 'en2cn' || q.type === 'audio2cn') {

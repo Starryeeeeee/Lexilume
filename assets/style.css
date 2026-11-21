@@ -215,6 +215,20 @@ h2.section {
   box-shadow: var(--press-xs);
 }
 
+/* 题头：题型标签居中，重听按钮贴右上角，始终在场不挤动版面 */
+.qhead {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+}
+.qhead-speak {
+  position: absolute;
+  right: -8px;
+  top: 0;
+}
+
 /* ---------- 题目卡 ---------- */
 .qcard {
   background: var(--bg);

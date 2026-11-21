@@ -161,6 +161,12 @@ window.WL = window.WL || {};
     } catch (e) { /* 静默失败 */ }
   }
 
+  // 掐掉正在播的读音，换题时用，避免上一题的尾音串到下一题
+  function stop() {
+    if (!window.speechSynthesis) return;
+    try { window.speechSynthesis.cancel(); } catch (e) { /* 忽略 */ }
+  }
+
   function normalize(s) {
     return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
   }
@@ -171,6 +177,7 @@ window.WL = window.WL || {};
     build: build,
     chooseType: chooseType,
     speak: speak,
+    stop: stop,
     normalize: normalize,
     shuffle: shuffle,
     blankOut: blankOut,
