@@ -2729,6 +2729,9 @@ window.WL = window.WL || {};
     top.appendChild(rep);
     wrap.appendChild(top);
 
+    // 双列卡片网格：宽屏两列，窄屏自动单列
+    var sgrid = el('div', 'settings-grid');
+
     // 累计：直接由每日日志求和，换词表、清空单本进度都不会清零
     var log = WL.store.getLog();
     var cum = { nw: 0, rv: 0, pr: 0, ms: 0, days: 0 };
@@ -2757,7 +2760,7 @@ window.WL = window.WL || {};
     ));
     cumCard.appendChild(h('<div class="small muted" style="margin-top:14px">累计用时约 ' + cumTime +
       '。单位是词次：同一个词被清空进度后重新学过会再计一次；换词表或清空单本进度不会清零。</div>'));
-    wrap.appendChild(cumCard);
+    sgrid.appendChild(cumCard);
 
     var prog = WL.store.getProgress(book.id);
     var now = Date.now();
@@ -2820,7 +2823,7 @@ window.WL = window.WL || {};
       lg.appendChild(h('<span><i style="background:' + sg[2] + '"></i>' + sg[0] + ' ' + sg[1] + '</span>'));
     });
     c1.appendChild(lg);
-    wrap.appendChild(c1);
+    sgrid.appendChild(c1);
 
     var c2 = el('div', 'card');
     c2.appendChild(el('h2', 'section', '未来 30 天复习量'));
@@ -2846,12 +2849,12 @@ window.WL = window.WL || {};
     c2.appendChild(h('<div class="small muted" style="margin-top:10px">明天预计 ' + tomorrow + ' 张，日均 ' +
       Math.round(fc.reduce(function (a, b) { return a + b; }, 0) / 30) + ' 张</div>'));
     c2.appendChild(h('<div class="small muted" style="margin-top:6px">已含假设：从明天起每天继续新学 ' + cfgF.newLimit + ' 个；实际随你的作答浮动。</div>'));
-    wrap.appendChild(c2);
+    sgrid.appendChild(c2);
 
     var c3 = el('div', 'card');
     c3.appendChild(el('h2', 'section', '打卡记录'));
     c3.appendChild(heatmap());
-    wrap.appendChild(c3);
+    sgrid.appendChild(c3);
 
     var c4 = el('div', 'card');
     c4.appendChild(el('h2', 'section', '遗忘风险'));
@@ -2868,7 +2871,7 @@ window.WL = window.WL || {};
       });
       c4.appendChild(wl);
     }
-    wrap.appendChild(c4);
+    sgrid.appendChild(c4);
 
     var c5 = el('div', 'card');
     c5.appendChild(el('h2', 'section', '错词本'));
@@ -2885,7 +2888,7 @@ window.WL = window.WL || {};
       });
       c5.appendChild(wl2);
     }
-    wrap.appendChild(c5);
+    sgrid.appendChild(c5);
 
     var c6 = el('div', 'card');
     c6.appendChild(el('h2', 'section', '已斩'));
@@ -2908,7 +2911,7 @@ window.WL = window.WL || {};
         c6.appendChild(h('<div class="small muted" style="margin-top:8px">共 ' + cutList.length + ' 个，仅显示前 30 个</div>'));
       }
     }
-    wrap.appendChild(c6);
+    wrap.appendChild(sgrid);
 
     return wrap;
   }
@@ -3099,64 +3102,34 @@ window.WL = window.WL || {};
     var cfg = WL.store.getConfig();
     var wrap = el('div', 'stack');
 
-    // 存储状况放在最前，换设备或换地址时一眼能看出记录为什么不在
-    var c0 = el('div', 'card');
-    c0.appendChild(el('h2', 'section', '存储'));
-    var avail = WL.store.available();
-    var progAll = 0, bookN = 0;
-    (WL.books || []).forEach(function (b) {
-      var n = Object.keys(WL.store.getProgress(b.id)).length;
-      progAll += n;
-      if (n) bookN++;
-    });
-    var rows = [
-      ['状态', avail ? '可用' : '不可用（记录不会保存）', avail ? 'var(--accent-deep)' : 'var(--wrong)'],
-      ['已学词条', progAll + ' 条，分布在 ' + bookN + ' 份词表', 'var(--ink-2)'],
-      ['有记录的天数', Object.keys(WL.store.getLog()).length + ' 天', 'var(--ink-2)'],
-      ['本机占用（浏览器存储）', (WL.store.usage() / 1024).toFixed(1) + ' KB', 'var(--ink-2)']
-    ];
-    rows.forEach(function (r) {
-      var row = el('div', 'spread');
-      row.style.padding = '10px 2px';
-      row.appendChild(el('span', 'small', r[0]));
-      var v = el('span', 'small');
-      v.style.color = r[2];
-      v.style.wordBreak = 'break-all';
-      v.style.textAlign = 'right';
-      v.textContent = r[1];
-      row.appendChild(v);
-      c0.appendChild(row);
-    });
-    c0.appendChild(h('<div class="small muted" style="margin-top:12px;line-height:1.8">' +
-      '数据按「打开方式」分开存放。换一个地址打开就是另一份空记录，' +
-      '比如从预览窗口换到双击 index.html，数据不会自动跟过去。' +
-      '搬家请用下面的导出与恢复，或者配置跨设备同步。</div>'));
-    wrap.appendChild(c0);
+    // 双列卡片网格：宽屏两列，窄屏自动落成单列
+    var grid = el('div', 'settings-grid');
 
-    if (WL.sync) wrap.appendChild(syncCard());
+    // 同步：内容最多，独立一张卡排最前
+    if (WL.sync) grid.appendChild(syncCard());
 
-    var c1 = el('div', 'card');
-    c1.appendChild(el('h2', 'section', '每日配额'));
+    // 学习偏好：每日配额 / 训练题型 / 习惯，合并为一张卡
+    var pref = el('div', 'card');
+    pref.appendChild(el('h2', 'section', '学习偏好'));
+    pref.appendChild(h('<div class="set-sub">每日配额</div>'));
 
     var f1 = el('div', 'field');
     f1.appendChild(el('label', null, '每天新学词数'));
     var i1 = el('input'); i1.type = 'number'; i1.min = '5'; i1.max = '100'; i1.value = cfg.newLimit;
     i1.onchange = function () { WL.store.setConfig({ newLimit: Math.max(1, Math.min(100, +i1.value || 20)) }); toast('已保存'); };
     f1.appendChild(i1);
-    c1.appendChild(f1);
+    pref.appendChild(f1);
 
     var f2 = el('div', 'field');
     f2.appendChild(el('label', null, '每天复习上限'));
     var i2 = el('input'); i2.type = 'number'; i2.min = '10'; i2.max = '300'; i2.value = cfg.reviewLimit;
     i2.onchange = function () { WL.store.setConfig({ reviewLimit: Math.max(5, Math.min(300, +i2.value || 60)) }); toast('已保存'); };
     f2.appendChild(i2);
-    c1.appendChild(f2);
+    pref.appendChild(f2);
 
-    c1.appendChild(h('<div class="small muted">复习上限到了不会丢词，没复习完的会在之后几天优先补上。</div>'));
-    wrap.appendChild(c1);
+    pref.appendChild(h('<div class="small muted">复习上限到了不会丢词，没复习完的会在之后几天优先补上。</div>'));
 
-    var c2 = el('div', 'card');
-    c2.appendChild(el('h2', 'section', '训练题型'));
+    pref.appendChild(h('<div class="set-sub" style="margin-top:18px">训练题型</div>'));
 
     // 基底题型：看词选义，始终启用
     var baseRow = el('div', 'spread');
@@ -3169,7 +3142,7 @@ window.WL = window.WL || {};
     baseTag.style.color = 'var(--accent-deep)';
     baseTag.style.fontWeight = '600';
     baseRow.appendChild(baseTag);
-    c2.appendChild(baseRow);
+    pref.appendChild(baseRow);
 
     // 可开关题型：目前只有看义选词，其余接口已留好
     var togglable = [['cn2en', '看义选词', '答对率会一同计入调度，建议开启']];
@@ -3195,7 +3168,7 @@ window.WL = window.WL || {};
         toast(cur.indexOf(t[0]) >= 0 ? '已启用「' + t[1] + '」' : '已关闭「' + t[1] + '」');
       };
       row.appendChild(sw);
-      c2.appendChild(row);
+      pref.appendChild(row);
     });
 
     var pendTypes = [
@@ -3214,12 +3187,10 @@ window.WL = window.WL || {};
       var tag = el('div', 'small', '—');
       tag.style.color = 'var(--ink-3)';
       row.appendChild(tag);
-      c2.appendChild(row);
+      pref.appendChild(row);
     });
-    wrap.appendChild(c2);
+    pref.appendChild(h('<div class="set-sub" style="margin-top:18px">习惯</div>'));
 
-    var c3 = el('div', 'card');
-    c3.appendChild(el('h2', 'section', '设置'));
     var row2 = el('div', 'spread');
     row2.appendChild(el('span', null, '学习时自动朗读单词'));
     var sw = el('div', 'sw' + (cfg.sound ? ' on' : ''));
@@ -3230,7 +3201,7 @@ window.WL = window.WL || {};
       toast(v ? '已开启朗读' : '已关闭朗读');
     };
     row2.appendChild(sw);
-    c3.appendChild(row2);
+    pref.appendChild(row2);
 
     var row3 = el('div', 'spread');
     row3.style.marginTop = '18px';
@@ -3242,9 +3213,9 @@ window.WL = window.WL || {};
       sw2.classList.toggle('on', v);
     };
     row3.appendChild(sw2);
-    c3.appendChild(row3);
-    c3.appendChild(h('<div class="small muted" style="margin-top:14px">朗读使用系统语音合成，Edge 与 Chrome 自带，不需要下载音频。</div>'));
-    wrap.appendChild(c3);
+    pref.appendChild(row3);
+    pref.appendChild(h('<div class="small muted" style="margin-top:14px">朗读使用系统语音合成，Edge 与 Chrome 自带，不需要下载音频。</div>'));
+    grid.appendChild(pref);
 
     var ck = el('div', 'card');
     ck.appendChild(el('h2', 'section', '查词'));
@@ -3266,13 +3237,42 @@ window.WL = window.WL || {};
     ck.appendChild(h('<div class="small muted" style="line-height:1.8">' +
       '查词直接调用 Agnes（agnes-3.0-flash）。Key 只在本机临时使用：不写入代码、不随同步上传、不进备份，' +
       '退出登录时自动清除，下次要用再填。可在 api.agnes-ai.cn 注册获取。</div>'));
-    wrap.appendChild(ck);
-
-    var c4 = el('div', 'card');
-    c4.appendChild(el('h2', 'section', '数据'));
+    // 数据与备份：存储状态 + 导出 / 恢复 / 清空合并为一张卡
+    var dataCard = el('div', 'card');
+    dataCard.appendChild(el('h2', 'section', '数据与备份'));
+    var avail = WL.store.available();
+    var progAll = 0, bookN = 0;
+    (WL.books || []).forEach(function (b) {
+      var n = Object.keys(WL.store.getProgress(b.id)).length;
+      progAll += n;
+      if (n) bookN++;
+    });
+    var rows = [
+      ['状态', avail ? '可用' : '不可用（记录不会保存）', avail ? 'var(--accent-deep)' : 'var(--wrong)'],
+      ['已学词条', progAll + ' 条，分布在 ' + bookN + ' 份词表', 'var(--ink-2)'],
+      ['有记录的天数', Object.keys(WL.store.getLog()).length + ' 天', 'var(--ink-2)'],
+      ['本机占用（浏览器存储）', (WL.store.usage() / 1024).toFixed(1) + ' KB', 'var(--ink-2)']
+    ];
+    rows.forEach(function (r) {
+      var row = el('div', 'spread');
+      row.style.padding = '10px 2px';
+      row.appendChild(el('span', 'small', r[0]));
+      var v = el('span', 'small');
+      v.style.color = r[2];
+      v.style.wordBreak = 'break-all';
+      v.style.textAlign = 'right';
+      v.textContent = r[1];
+      row.appendChild(v);
+      dataCard.appendChild(row);
+    });
+    dataCard.appendChild(h('<div class="small muted" style="margin-top:12px;line-height:1.8">' +
+      '数据按「打开方式」分开存放。换一个地址打开就是另一份空记录，' +
+      '比如从预览窗口换到双击 index.html，数据不会自动跟过去。' +
+      '搬家请用下面的导出与恢复，或者配置跨设备同步。</div>'));
+    dataCard.appendChild(h('<div class="set-sub" style="margin-top:4px">备份与恢复</div>'));
     var b1 = el('button', 'btn block', '导出备份');
     b1.onclick = exportBackup;
-    c4.appendChild(b1);
+    dataCard.appendChild(b1);
 
     var fileInput = el('input');
     fileInput.type = 'file';
@@ -3305,8 +3305,8 @@ window.WL = window.WL || {};
     var b2 = el('button', 'btn block ghost', '从备份恢复');
     b2.onclick = function () { fileInput.click(); };
     b2.style.marginTop = '8px';
-    c4.appendChild(b2);
-    c4.appendChild(fileInput);
+    dataCard.appendChild(b2);
+    dataCard.appendChild(fileInput);
 
     var b3 = el('button', 'btn block ghost', '清空全部数据');
     b3.style.marginTop = '8px';
@@ -3317,8 +3317,8 @@ window.WL = window.WL || {};
       toast('已清空');
       render();
     };
-    c4.appendChild(b3);
-    wrap.appendChild(c4);
+    dataCard.appendChild(b3);
+    grid.appendChild(dataCard);
 
     var c5 = el('div', 'card');
     c5.appendChild(el('h2', 'section', '关于'));
@@ -3330,7 +3330,9 @@ window.WL = window.WL || {};
       '数据默认只存本机浏览器；配置跨设备同步后，学习进度会经 GitHub 仓库在设备间合并。' +
       '</div>'
     ));
-    wrap.appendChild(c5);
+    grid.appendChild(c5);
+
+    wrap.appendChild(grid);
 
     return wrap;
   }
