@@ -1980,6 +1980,7 @@ window.WL = window.WL || {};
     st.collect = null;
     st.error = null;
     st.loading = true;
+    st.q = word;          // 失败时把词留在输入框，方便直接重试
     S.lookup = st;
     render();
 
@@ -2032,7 +2033,7 @@ window.WL = window.WL || {};
       S.lookup.loading = false;
       render();
     }).catch(function (e) {
-      S.lookup.msgs.pop();  // 撤回刚塞进去的提问，保持列表干净
+      // 保留刚才的提问，方便直接改一下再发
       S.lookup.loading = false;
       S.lookup.error = e.message || '网络错误';
       render();
@@ -2187,6 +2188,8 @@ window.WL = window.WL || {};
     input.placeholder = st.msgs.length ? '继续追问…' : '输入单词或短语';
     input.style.cssText = 'flex:1;min-width:0';
     input.enterkeyhint = 'send';
+    // 首轮失败后把上次输的词留在框里，直接回车即可重试
+    if (!st.msgs.length && st.q) input.value = st.q;
     row.appendChild(input);
     var goBtn = el('button', 'btn primary', st.loading ? '回答中…' : (st.msgs.length ? '追问' : '讲解'));
     goBtn.disabled = st.loading;
