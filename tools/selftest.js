@@ -349,5 +349,77 @@ ok('进度搬到 daily 且键不变', !!(storeStub.prog.daily && storeStub.prog.
 ok('旧进度键已清理', !storeStub.prog['daily-2026-11-20']);
 ok('迁移可重复执行', D3.migrate({}, true) === 0);
 
+
+// ---------------------------------------------------------------- 查词收藏并入 / 删除不复活
+console.log('\n[12] 查词收藏与「我的积累」');
+const ls4 = {
+  _d: {},
+  getItem(k) { return Object.prototype.hasOwnProperty.call(this._d, k) ? this._d[k] : null; },
+  setItem(k, v) { this._d[k] = String(v); },
+  removeItem(k) { delete this._d[k]; }
+};
+const doc4 = {
+  readyState: 'loading',
+  addEventListener() {},
+  createElement() { return { style: {}, appendChild() {}, setAttribute() {} }; },
+  querySelector() { return null; },
+  body: {}
+};
+const ctx4 = {
+  console,
+  document: doc4,
+  window: { addEventListener() {}, WL: {} },
+  localStorage: ls4,
+  navigator: {},
+  setTimeout,
+  clearTimeout,
+  Promise
+};
+vm.createContext(ctx4);
+['src/srs.js', 'src/store.js', 'src/quiz.js', 'src/sync.js', 'src/app.js'].forEach(function (f) {
+  vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx4, { filename: f });
+});
+const W4 = ctx4.window.WL;
+
+W4.books = [{
+  id: 'mine', name: '我的积累', note: '',
+  words: [{ id: 'mine-0', w: 'keepme' }, { id: 'mine-1', w: 'deleteme' }]
+}];
+ok('查词逻辑已导出', !!(W4.lookup && W4.lookup.merge));
+
+// 收藏一个词 → 并入
+W4.store.saveLookupWord({ id: 'lk-a', w: 'collected', tr: '收藏的词' });
+W4.lookup.merge();
+const mine1 = W4.books[0];
+ok('收藏词已并入我的积累', mine1.words.some(function (w) { return w.w === 'collected'; }));
+ok('并入后 byId 可查到', !!mine1.byId['lk-a']);
+
+// 删除一个内置词 → 不再出现，且重复合并也不会复活
+W4.store.addMineRemoved('deleteme');
+W4.lookup.merge();
+ok('删除的内置词已移除', !mine1.words.some(function (w) { return w.w === 'deleteme'; }));
+W4.lookup.merge();
+ok('重复合并不复活', !mine1.words.some(function (w) { return w.w === 'deleteme'; }));
+ok('未删除的词仍在', mine1.words.some(function (w) { return w.w === 'keepme'; }));
+
+// 取消收藏 + 删除 → 收藏词也消失
+W4.store.removeLookupWord('collected');
+W4.store.addMineRemoved('collected');
+W4.lookup.merge();
+ok('取消收藏后词条消失', !mine1.words.some(function (w) { return w.w === 'collected'; }));
+
+// 重新收藏 → 从删除名单里放出来，能再次并入
+W4.store.removeMineRemoved('collected');
+W4.store.saveLookupWord({ id: 'lk-b', w: 'collected', tr: '重新收藏' });
+W4.lookup.merge();
+ok('重新收藏可恢复', mine1.words.some(function (w) { return w.w === 'collected'; }));
+
+// 备份导出不含密钥，但含收藏
+W4.store.setConfig({ lookupKey: 'sk-secret' });
+const dump = W4.store.exportAll();
+ok('备份不含查词密钥', dump.config.lookupKey === undefined);
+ok('备份含收藏词条', Array.isArray(dump.lookupWords) && dump.lookupWords.length > 0);
+ok('备份含删除名单', Array.isArray(dump.mineRemoved) && dump.mineRemoved.indexOf('deleteme') >= 0);
+
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败\n');
 process.exit(fail ? 1 : 0);

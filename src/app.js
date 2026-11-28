@@ -1865,6 +1865,12 @@ window.WL = window.WL || {};
     migrate: migrateDailyBooks
   };
 
+  // 查词的纯逻辑导出（tools/selftest.js 直接测「收藏并入」与「删除不复活」）
+  WL.lookup = {
+    merge: mergeLookupIntoMine,
+    collect: collectLookup
+  };
+
   // 打开词表页时静默检查：有没导入过的就并入《时文积累》。十分钟内只查一次。
   var autoDaily = { busy: false, last: 0 };
 
@@ -3223,8 +3229,8 @@ window.WL = window.WL || {};
     fk.appendChild(saveK);
     ck.appendChild(fk);
     ck.appendChild(h('<div class="small muted" style="line-height:1.8">' +
-      '查词直接调用 Agnes（agnes-3.0-flash）。Key 只存在本机浏览器，不写入代码、不随同步上传；' +
-      '换设备或清缓存后需重新粘贴。可在 api.agnes-ai.cn 注册获取。</div>'));
+      '查词直接调用 Agnes（agnes-3.0-flash）。Key 只在本机临时使用：不写入代码、不随同步上传、不进备份，' +
+      '退出登录时自动清除，下次要用再填。可在 api.agnes-ai.cn 注册获取。</div>'));
     wrap.appendChild(ck);
 
     var c4 = el('div', 'card');
@@ -3251,6 +3257,7 @@ window.WL = window.WL || {};
         try {
           WL.store.importAll(data);
           mergeUserBooks();
+          mergeLookupIntoMine();
           S.bookId = WL.store.getConfig().book;
           WL.app.render();
           toast('已恢复备份');

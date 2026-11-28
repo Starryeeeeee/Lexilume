@@ -194,6 +194,9 @@ window.WL = window.WL || {};
     (WL.books || []).forEach(function (b) {
       out.books[b.id] = getProgress(b.id);
     });
+    // 查词收藏与「我的积累」删除名单也要带走，否则恢复后收藏的词会消失
+    out.lookupWords = getLookupWords();
+    out.mineRemoved = getMineRemoved();
     return out;
   }
 
@@ -201,6 +204,8 @@ window.WL = window.WL || {};
     if (!data || !data.books) throw new Error('文件格式不对');
     if (data.config) writeJSON(K.config, data.config);
     if (data.userBooks && Array.isArray(data.userBooks)) saveUserBooks(data.userBooks);
+    if (Array.isArray(data.lookupWords)) writeJSON(K.lookup, data.lookupWords);
+    if (Array.isArray(data.mineRemoved)) writeJSON(K.mineDel, data.mineRemoved);
     Object.keys(data.books).forEach(function (id) {
       writeJSON(K.progress + id, data.books[id]);
       cache[id] = null;

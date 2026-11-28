@@ -1,4 +1,4 @@
-var CACHE = 'lexilume-v51';
+var CACHE = 'lexilume-v52';
 var ASSETS = [
   './',
   './index.html',
