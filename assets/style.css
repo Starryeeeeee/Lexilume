@@ -51,11 +51,15 @@ input, textarea { font-family: inherit; border: none; outline: none; background:
 .seg-btn.on { box-shadow: var(--press-xs); color: var(--accent-deep); font-weight: 600; }
 
 .app {
-  max-width: 720px;
+  /* PC 优先：宽屏用满；学习卡等专注页自己收窄（.narrow） */
+  max-width: 1440px;
   margin: 0 auto;
   /* 顶部加安全区补偿：iPhone 灵动岛/刘海下内容不再被遮挡 */
-  padding: calc(30px + env(safe-area-inset-top)) 26px calc(110px + env(safe-area-inset-bottom));
+  padding: calc(32px + env(safe-area-inset-top)) 48px 64px;
 }
+
+/* 学习流程页（答题 / 词卡 / 拼写 / 锁屏 / 结算）：居中窄栏，专注不散焦 */
+.narrow { max-width: 760px; margin: 0 auto; }
 
 /* ---------- 顶栏 ---------- */
 .topbar {
@@ -666,7 +670,7 @@ h2.section {
   color: var(--ink-2);
 }
 
-/* ---------- 设置 / 统计：宽屏双列卡片，窄屏自动单列 ---------- */
+/* ---------- 设置 / 统计：宽屏双列卡片，窄屏自动单列 ---------- */
 .set-sub {
   font-size: 12px;
   font-weight: 600;
@@ -674,6 +678,10 @@ h2.section {
   color: var(--ink-3);
   margin: 16px 0 10px;
 }
+
+/* ---------- 设置 / 统计：宽屏双列卡片（列宽随容器自适应） ---------- */
+.settings-grid { columns: 2; column-gap: 24px; }
+.settings-grid > .card { break-inside: avoid; margin: 0 0 24px; }
 
 /* ---------- 学习词卡的动作行：斩 + 继续 ---------- */
 .learn-actions { display: flex; gap: 12px; margin-top: 26px; }

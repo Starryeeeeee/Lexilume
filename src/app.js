@@ -749,7 +749,7 @@ window.WL = window.WL || {};
 
   function lockBody() {
     var sy = WL.sync.state();
-    var wrap = el('div', 'stack lock');
+    var wrap = el('div', 'stack narrow lock');
     wrap.appendChild(h('<div class="lock-brand">Lexi<span>lume</span></div>'));
 
     var card = el('div', 'card');
@@ -847,7 +847,7 @@ window.WL = window.WL || {};
 
   function viewResume() {
     var s = S.session;
-    var wrap = el('div', 'stack');
+    var wrap = el('div', 'stack narrow');
     var card = el('div', 'card');
     card.style.textAlign = 'center';
     card.appendChild(h('<div style="font-size:24px;margin-bottom:6px">上次学习未完成</div>'));
@@ -1146,7 +1146,7 @@ window.WL = window.WL || {};
     var word = wordOf(cur.wid);
     if (!word) { s.i++; return viewStudy(); }
 
-    var wrap = el('div', 'stack');
+    var wrap = el('div', 'stack narrow');
     var total = s.total || s.items.length;
     var doneN = Math.min(s.i, total);
 
@@ -1248,7 +1248,7 @@ window.WL = window.WL || {};
 
     var total = s.learn.length;
 
-    var wrap = el('div', 'stack');
+    var wrap = el('div', 'stack narrow');
     var top = el('div', 'study-top');
     top.appendChild(el('div', null, '新学 · 第 ' + (s.li + 1) + ' / ' + total + ' 词'));
     wrap.appendChild(top);
@@ -1278,7 +1278,7 @@ window.WL = window.WL || {};
     if (nNew) descParts.push('新学 ' + nNew + ' 个');
     if (nRev) descParts.push('复习 ' + nRev + ' 个');
 
-    var wrap = el('div', 'stack');
+    var wrap = el('div', 'stack narrow');
     var card = el('div', 'card finish-card');
     card.style.textAlign = 'center';
     card.appendChild(h('<div class="finish-title">拼写环节</div>'));
@@ -2107,7 +2107,7 @@ window.WL = window.WL || {};
   }
 
   function viewLookup() {
-    var wrap = el('div', 'stack');
+    var wrap = el('div', 'stack narrow');
     var cfg = WL.store.getConfig();
     var st = S.lookup = S.lookup || { msgs: [], loading: false, error: null, collect: null };
     if (!st.msgs) st.msgs = [];
