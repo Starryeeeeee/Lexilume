@@ -695,6 +695,32 @@ h2.section {
 .lock a { color: var(--accent-deep); text-decoration: none; }
 .lock a:hover { text-decoration: underline; }
 
+/* ---------- 查词对话 ---------- */
+.lk-msg {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--bg-soft);
+  box-shadow: var(--raise-xs);
+  max-width: 92%;
+  margin-bottom: 12px;
+}
+.lk-msg.user {
+  margin-left: auto;
+  background: #E4EAF4;
+  box-shadow: var(--press-xs);
+}
+.lk-who {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  margin-bottom: 6px;
+}
+.lk-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.75;
+}
+
 /* ---------- 移动端 ---------- */
 @media (max-width: 640px) {
   .app { padding: calc(22px + env(safe-area-inset-top)) 18px calc(100px + env(safe-area-inset-bottom)); }

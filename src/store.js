@@ -10,7 +10,8 @@ window.WL = window.WL || {};
     books: 'wl.books.v1',          // 用户自建词书（内置词书在代码里，不存这里）
     session: 'wl.session.v1',      // 未完成会话的快照（断点续学）
     daily: 'wl.daily.v1',          // 已导入的时文词表文件名
-    lookup: 'wl.lookup.v1'         // 查词收藏的词条（并入「我的积累」词书）
+    lookup: 'wl.lookup.v1',        // 查词收藏的词条（并入「我的积累」词书）
+    mineDel: 'wl.mineDel.v1'       // 「我的积累」里被删掉的词（内置词删了不能复活）
   };
 
   var DEFAULT_CONFIG = {
@@ -312,6 +313,30 @@ window.WL = window.WL || {};
     return getLookupWords().some(function (x) { return (x.w || '').toLowerCase() === key; });
   }
 
+  /* 「我的积累」删除名单：内置词也要记住删过，否则刷新会复活 */
+  function getMineRemoved() {
+    return readJSON(K.mineDel, []);
+  }
+
+  function saveMineRemoved(list) {
+    writeJSON(K.mineDel, list);
+  }
+
+  function addMineRemoved(wordText) {
+    var key = (wordText || '').toLowerCase();
+    if (!key) return;
+    var list = getMineRemoved();
+    if (list.indexOf(key) < 0) {
+      list.push(key);
+      saveMineRemoved(list);
+    }
+  }
+
+  function removeMineRemoved(wordText) {
+    var key = (wordText || '').toLowerCase();
+    saveMineRemoved(getMineRemoved().filter(function (x) { return x !== key; }));
+  }
+
   function usage() {
     var total = 0;
     try {
@@ -376,6 +401,9 @@ window.WL = window.WL || {};
     removeLookupWord: removeLookupWord,
     saveLookupWords: saveLookupWords,
     hasLookupWord: hasLookupWord,
+    getMineRemoved: getMineRemoved,
+    addMineRemoved: addMineRemoved,
+    removeMineRemoved: removeMineRemoved,
     usage: usage,
     available: available,
     origin: origin
