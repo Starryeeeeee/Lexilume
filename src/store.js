@@ -9,7 +9,8 @@ window.WL = window.WL || {};
     streak: 'wl.streak.v1',
     books: 'wl.books.v1',          // 用户自建词书（内置词书在代码里，不存这里）
     session: 'wl.session.v1',      // 未完成会话的快照（断点续学）
-    daily: 'wl.daily.v1'           // 已导入的时文词表文件名
+    daily: 'wl.daily.v1',          // 已导入的时文词表文件名
+    lookup: 'wl.lookup.v1'         // 查词收藏的词条（并入「我的积累」词书）
   };
 
   var DEFAULT_CONFIG = {
@@ -19,7 +20,8 @@ window.WL = window.WL || {};
     reviewLimit: 60,
     sound: true,
     shuffleNew: false,
-    activeTypes: ['en2cn', 'cn2en']
+    activeTypes: ['en2cn', 'cn2en'],
+    lookupKey: ''   // 查词用的 Agnes API Key（只存本机，不上云、不进仓库）
   };
 
   var cache = {};
@@ -185,7 +187,9 @@ window.WL = window.WL || {};
   }
 
   function exportAll() {
-    var out = { v: 1, exportedAt: Date.now(), config: getConfig(), books: {}, log: getLog(), userBooks: getUserBooks() };
+    var cfg = Object.assign({}, getConfig());
+    delete cfg.lookupKey;  // 密钥不进备份文件，避免明文落盘
+    var out = { v: 1, exportedAt: Date.now(), config: cfg, books: {}, log: getLog(), userBooks: getUserBooks() };
     (WL.books || []).forEach(function (b) {
       out.books[b.id] = getProgress(b.id);
     });
@@ -277,6 +281,37 @@ window.WL = window.WL || {};
     }
   }
 
+  /* 查词收藏：把讲解里整理的词条存下来，启动时并入「我的积累」词书 */
+  function getLookupWords() {
+    return readJSON(K.lookup, []);
+  }
+
+  function saveLookupWord(word) {
+    var list = getLookupWords();
+    // 按小写去重；重收同一个词时保留最新一版讲解
+    var key = (word.w || '').toLowerCase();
+    list = list.filter(function (x) { return (x.w || '').toLowerCase() !== key; });
+    list.push(word);
+    writeJSON(K.lookup, list);
+    return list;
+  }
+
+  function removeLookupWord(wordText) {
+    var key = (wordText || '').toLowerCase();
+    saveLookupWords(getLookupWords().filter(function (x) {
+      return (x.w || '').toLowerCase() !== key;
+    }));
+  }
+
+  function saveLookupWords(list) {
+    writeJSON(K.lookup, list);
+  }
+
+  function hasLookupWord(wordText) {
+    var key = (wordText || '').toLowerCase();
+    return getLookupWords().some(function (x) { return (x.w || '').toLowerCase() === key; });
+  }
+
   function usage() {
     var total = 0;
     try {
@@ -336,6 +371,11 @@ window.WL = window.WL || {};
     getDailyImported: getDailyImported,
     isDailyImported: isDailyImported,
     markDailyImported: markDailyImported,
+    getLookupWords: getLookupWords,
+    saveLookupWord: saveLookupWord,
+    removeLookupWord: removeLookupWord,
+    saveLookupWords: saveLookupWords,
+    hasLookupWord: hasLookupWord,
     usage: usage,
     available: available,
     origin: origin
