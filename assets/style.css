@@ -666,9 +666,7 @@ h2.section {
   color: var(--ink-2);
 }
 
-/* ---------- 设置 / 统计：宽屏双列卡片，窄屏自动单列 ---------- */
-.settings-grid { columns: 2 300px; column-gap: 22px; }
-.settings-grid > .card { break-inside: avoid; margin: 0 0 22px; }
+/* ---------- 设置 / 统计：宽屏双列卡片，窄屏自动单列 ---------- */
 .set-sub {
   font-size: 12px;
   font-weight: 600;
