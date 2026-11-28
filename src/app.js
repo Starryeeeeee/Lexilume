@@ -1323,6 +1323,19 @@ window.WL = window.WL || {};
     }
     card.appendChild(def);
 
+    // 时文积累的词：附上 Agnes 当天留下的句式精讲（按单词匹配）
+    var bookNow = curBook();
+    if (bookNow && bookNow.id === 'daily' && bookNow.notes && bookNow.notes.length) {
+      var noteText = null;
+      for (var ni = 0; ni < bookNow.notes.length; ni++) {
+        if ((bookNow.notes[ni].word || '').toLowerCase() === (word.w || '').toLowerCase()) {
+          noteText = bookNow.notes[ni].text;
+          break;
+        }
+      }
+      if (noteText) card.appendChild(h('<div class="note-box">' + esc(noteText) + '</div>'));
+    }
+
     var actions = el('div', 'learn-actions');
     if (withCut) {
       var cut = el('button', 'btn lg btn-cut', '斩');
@@ -2282,6 +2295,25 @@ window.WL = window.WL || {};
         toast('已切换到「' + b.name + '」');
       };
       list.appendChild(btn);
+
+      // 时文积累：显示 Agnes 反馈回路依据（掌握/风险/遗忘统计），让调难度透明
+      if (b.id === 'daily' && learned) {
+        var mC = 0, lC = 0, rC = 0, cutC = 0, laC = 0;
+        var chsF = activeChannels();
+        Object.keys(prog).forEach(function (wid) {
+          var st = prog[wid];
+          if (st.cut) { cutC++; return; }
+          var hl = WL.srs.healthOf(st, Date.now(), chsF);
+          if (hl === 'mastered' || hl === 'familiar') mC++;
+          else if (hl === 'risk') rC++;
+          else lC++;
+          laC += st.lapses || 0;
+        });
+        var fb = el('div', 'book-acts');
+        fb.appendChild(el('span', 'small muted', 'Agnes 反馈：掌握 ' + mC + ' · 学习中 ' + lC +
+          ' · 风险 ' + rC + ' · 遗忘 ' + laC + ' 次 · 已斩 ' + cutC));
+        list.appendChild(fb);
+      }
 
       // 自建词书：提供重命名与删除（删除不传播到远端，见确认文案）
       if (userOwned) {
