@@ -166,6 +166,16 @@ python -m unittest discover -s scripts/tests -t .   # 每日时文词生成器 7
 
 ## 八、每日时文词自动化（2026-11-21 上线）
 
+### 激励与冲刺三件套（2026-11-28 上线）
+
+调研竞品（Anki FSRS / Quizlet / Vocabulary.com / 墨墨 / 百词斩，报告在 `Desktop/Lexilume竞品调研.html`）后落地的三项：
+
+1. **首页今日完成度圆环**：`已学 ÷ 今日总计划`，计划 = 已完成 + 剩余新学配额 + 剩余到期复习（当前词书口径）。完成变绿打勾。达成当日即自动发一枚连胜保护（`grantFreezeIfEligible`，库存上限 2）。
+2. **连胜保护**：日志字段 `fzg`（获得）/`fz`（消耗），库存 = Σfzg − Σfz，随日志按天 max 合并、跨设备一致。boot 时 `applyStreakFreezes` 从昨天向前补卡：缺失天逐一消耗库存，直到遇到活动日或库存用尽；`streakDays` 把冻结日算作连续。漏卡开屏有 toast 说明。
+3. **考前冲刺模式**：首页独立卡，范围（未来 7/14/30 天到期 / 全部已学词），按最早到期排序，一轮上限 60（`SPRINT_SIZE`）。核心规则：**答对完全不动调度**（提前复习不虚抬间隔），**答错写遗忘记录**（`review(false)`，让词提前回队列）；错题排到队尾直到答对（练习式）；不计 ok/bad 日志、计 `pr`；可斩词；`from: 'sprint'`，phase `sprint`，queueDrained → finishSprint，viewDone 有专属结算分支。
+
+注意：`sync.js` 的 `mergeLog` 是字段白名单，**给日志加新字段必须同步补进 mergeLog**（fzg/fz 已加，漏了就会被同步清掉）。
+
 目标：每天自动产出 `data/daily/<日期>.json`，网站「词表 → 每日时文词 → 检查并导入」变成一本独立词书。
 
 - 调度：`.github/workflows/daily-words.yml`，cron `0 22 * * *`（北京 06:00），并发组 `daily-words` 防撞车；`scripts-ci.yml` 在改动 `scripts/**` 时跑测试（3.10 / 3.12 双版本）
