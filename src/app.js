@@ -161,6 +161,7 @@ window.WL = window.WL || {};
       answered: null,
       newDone: {},
       revDone: {},
+      revWords: {},
       spokenFor: '',
       right: 0,
       wrong: 0,
@@ -223,7 +224,10 @@ window.WL = window.WL || {};
 
   function enterSpellAsk() {
     var s = S.session;
-    s.spellQueue = Object.keys(s.newDone).filter(function (id) {
+    // 拼写环节覆盖：今天复习过的词（不论答对答错）+ 今天新学的词，按出现顺序排列
+    s.revWords = s.revWords || {};
+    s.spellQueue = Object.keys(s.revWords).concat(Object.keys(s.newDone)).filter(function (id, idx, arr) {
+      if (arr.indexOf(id) !== idx) return false; // 去重
       var w = wordOf(id);
       return w && WL.quiz.spellable(w);
     });
@@ -307,6 +311,7 @@ window.WL = window.WL || {};
       answered: null,
       newDone: {},
       revDone: {},
+      revWords: {},
       spokenFor: '',
       right: 0,
       wrong: 0,
@@ -366,6 +371,7 @@ window.WL = window.WL || {};
       answered: null,
       newDone: {},
       revDone: {},
+      revWords: {},
       spokenFor: '',
       right: 0,
       wrong: 0,
@@ -621,6 +627,11 @@ window.WL = window.WL || {};
     WL.srs.review(st, channel, ok, now);
     WL.store.putProgress(s.bookId, cur.wid, st);
 
+    if (cur.from === 'review') {
+      // 复习过的词（不论对错）都记入拼写候选
+      s.revWords = s.revWords || {};
+      s.revWords[cur.wid] = 1;
+    }
     if (ok) {
       s.right++;
       WL.store.bumpLog('ok');
@@ -1258,13 +1269,19 @@ window.WL = window.WL || {};
     var s = S.session;
     if (!s) { S.view = 'home'; return viewHome(); }
     var n = s.spellQueue.length;
+    var nNew = s.spellQueue.filter(function (id) { return s.newDone[id]; }).length;
+    var nRev = n - nNew;
+    var descParts = [];
+    if (nNew) descParts.push('新学 ' + nNew + ' 个');
+    if (nRev) descParts.push('复习 ' + nRev + ' 个');
 
     var wrap = el('div', 'stack');
     var card = el('div', 'card finish-card');
     card.style.textAlign = 'center';
-    card.appendChild(h('<div class="finish-title">今日新学完成</div>'));
-    card.appendChild(h('<div class="muted small">新学了 ' + Object.keys(s.newDone).length +
-      ' 个词。要进入拼写模式吗？拼写模式只显示中文释义并朗读单词，你来拼写。</div>'));
+    card.appendChild(h('<div class="finish-title">拼写环节</div>'));
+    card.appendChild(h('<div class="muted small">' +
+      (descParts.length ? '本轮 ' + descParts.join('、') + '。' : '') +
+      '要进入拼写模式吗？拼写只显示中文释义并朗读单词，你来拼写。</div>'));
     card.appendChild(clayArt('party_popper_3d.png'));
 
     var go = el('button', 'btn primary block lg', '进入拼写模式（' + n + ' 词）');
@@ -3094,7 +3111,7 @@ window.WL = window.WL || {};
       '<div class="small" style="color:#5E6470;line-height:1.9">' +
       '调度模型：每个词维护难度 D 与稳定度 S，保留率 R = 1/(1+t/9S)，按 90% 保留率反解下次复习时间。<br>' +
       '答错时稳定度缩水但不清零，避免难词被永久打回原点。<br>' +
-      '流程：复习到期词 → 新学（看一张卡立刻测一个）→ 拼写环节（可跳过）。<br>' +
+      '流程：复习到期词 → 新学（看一张卡立刻测一个）→ 拼写环节（复习与新学的词都会进入，可跳过）。<br>' +
       '数据默认只存本机浏览器；配置跨设备同步后，学习进度会经 GitHub 仓库在设备间合并。' +
       '</div>'
     ));
