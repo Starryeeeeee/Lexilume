@@ -915,7 +915,7 @@ window.WL = window.WL || {};
   function viewHome() {
     var cfg = WL.store.getConfig();
     var book = curBook();
-    var wrap = el('div', 'stack');
+    var wrap = el('div', 'stack narrow');
     if (!book) {
       wrap.appendChild(h('<div class="empty"><div class="big">还没有词表</div><div>去「词表」导入一份吧</div></div>'));
       return wrap;
@@ -2274,7 +2274,7 @@ window.WL = window.WL || {};
     migrateDailyBooks();
     autoImportDaily();
     var cfg = WL.store.getConfig();
-    var wrap = el('div', 'stack');
+    var wrap = el('div', 'stack narrow');
 
     var card = el('div', 'card');
     card.appendChild(el('h2', 'section', '词表'));
