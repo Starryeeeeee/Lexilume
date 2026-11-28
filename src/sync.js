@@ -127,7 +127,9 @@ window.WL = window.WL || {};
         ok: Math.max(x.ok || 0, y.ok || 0),
         bad: Math.max(x.bad || 0, y.bad || 0),
         ms: Math.max(x.ms || 0, y.ms || 0),
-        pr: Math.max(x.pr || 0, y.pr || 0)
+        pr: Math.max(x.pr || 0, y.pr || 0),
+        fzg: Math.max(x.fzg || 0, y.fzg || 0),
+        fz: Math.max(x.fz || 0, y.fz || 0)
       };
     });
     return out;

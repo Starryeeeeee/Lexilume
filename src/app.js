@@ -16,8 +16,14 @@ window.WL = window.WL || {};
   // 练习模式一轮的题数
   var PRACTICE_SIZE = 10;
 
+  // 考前冲刺一轮的词数上限（按到期先后取最急的）
+  var SPRINT_SIZE = 60;
+
   // 练习模式的范围与题型选择（页面重渲染间保持）
   var practiceSel = { scope: 'all', mode: 'en2cn' };
+
+  // 考前冲刺的范围选择
+  var sprintSel = { range: '7' };
 
   // 首页「新学」的加量询问（当天配额用完后才出现）
   var extraAsk = false;
@@ -310,6 +316,75 @@ window.WL = window.WL || {};
     render();
   }
 
+  // 考前冲刺：把即将到期（或全部已学）的词提前集中过一遍。
+  // 答对不动调度——提前复习不该把词的间隔推远；答错才写遗忘记录，让它提前回队列。
+  function startSprint(range) {
+    var book = curBook();
+    if (!book) return;
+    var prog = WL.store.getProgress(book.id);
+    var now = Date.now();
+    var chs = activeChannels();
+    var horizon = range === 'all' ? Infinity : now + Number(range) * WL.srs.DAY;
+
+    function minDue(st) {
+      var m = Infinity;
+      for (var i = 0; i < chs.length; i++) {
+        var c = st.ch[chs[i]];
+        if (c && c.n > 0 && c.due && c.due < m) m = c.due;
+      }
+      return m;
+    }
+
+    var pool = book.words.filter(function (w) {
+      var st = prog[w.id];
+      if (!st || st.cut) return false;
+      var md = minDue(st);
+      return md !== Infinity && md <= horizon;
+    });
+    if (!pool.length) {
+      toast(range === 'all' ? '还没有可冲刺的已学词' : '未来 ' + range + ' 天内没有到期的词，可以选更大的范围');
+      return;
+    }
+    pool.sort(function (a, b) { return minDue(prog[a.id]) - minDue(prog[b.id]); });
+
+    S.session = {
+      phase: 'sprint',
+      sprintMode: true,
+      sprintRange: range,
+      learn: [],
+      li: 0,
+      reviewWids: [],
+      spellQueue: [],
+      items: pool.slice(0, SPRINT_SIZE).map(function (w) { return { wid: w.id, from: 'sprint', retry: 0 }; }),
+      i: 0,
+      total: Math.min(pool.length, SPRINT_SIZE),
+      retryCard: false,
+      bookId: book.id,
+      t0: Date.now(),
+      q: null,
+      answered: null,
+      newDone: {},
+      revDone: {},
+      spokenFor: '',
+      right: 0,
+      wrong: 0,
+      ended: false
+    };
+    S.view = 'study';
+    prepare();
+    render();
+  }
+
+  function finishSprint() {
+    var s = S.session;
+    if (!s) return;
+    s.ended = true;
+    s.phase = 'done';
+    WL.store.removeSession();
+    S.view = 'study';
+    render();
+  }
+
   // 一段队列走完之后去哪，由当前阶段决定
   function queueDrained() {
     var s = S.session;
@@ -321,6 +396,8 @@ window.WL = window.WL || {};
       nextFromLearn();
     } else if (s.phase === 'practice') {
       finishPractice();
+    } else if (s.phase === 'sprint') {
+      finishSprint();
     } else if (s.phase === 'spell') {
       finishSession();
     } else {
@@ -374,7 +451,7 @@ window.WL = window.WL || {};
       // 刚看完词卡，立刻测「看词选义」：认出刚见过的这个词；
       // 「看义选词」这类回忆词形的题留给复习阶段的产出通道
       type = 'en2cn';
-    } else if (cur.from === 'review' && st) {
+    } else if ((cur.from === 'review' || cur.from === 'sprint') && st) {
       var chs = activeChannels();
       channel = WL.srs.weakestChannel(st, now, chs);
       if (chs.indexOf(channel) < 0) channel = 'r';
@@ -396,7 +473,7 @@ window.WL = window.WL || {};
     // 自动朗读：听音辨义与拼写本来就要念；
     // 复习/练习里的「看词选义」英文已经摆在屏幕上，念出来不泄露答案
     var autoSound = type === 'audio2cn' || type === 'spell' ||
-      (type === 'en2cn' && (cur.from === 'review' || cur.from === 'practice'));
+      (type === 'en2cn' && (cur.from === 'review' || cur.from === 'practice' || cur.from === 'sprint'));
     if (autoSound) WL.quiz.speak(word.w, cfg.sound);
   }
 
@@ -426,11 +503,11 @@ window.WL = window.WL || {};
         if (S.session === s && s.answered && !s.answered.ok) {
           var cur2 = currentItem();
           if (!cur2) return;
-          if (cur2.from === 'practice') {
-            // 练习错题：看一眼正确答案后排到队尾稍后再答，重复直到答对
+          if (cur2.from === 'practice' || cur2.from === 'sprint') {
+            // 练习/冲刺错题：看一眼正确答案后排到队尾稍后再答，重复直到答对
             var cutNow = WL.store.getProgress(s.bookId)[cur2.wid] && WL.store.getProgress(s.bookId)[cur2.wid].cut;
             if (!cutNow) {
-              s.items.push({ wid: cur2.wid, from: 'practice', retry: (cur2.retry || 0) + 1 });
+              s.items.push({ wid: cur2.wid, from: cur2.from, retry: (cur2.retry || 0) + 1 });
               s.total = s.items.length;
             }
             advanceCorrect();
@@ -500,6 +577,29 @@ window.WL = window.WL || {};
     if (cur.from === 'practice') {
       // 练习模式：不计入记忆调度，但计入每日练习量（激励用）
       if (ok) s.right++; else s.wrong++;
+      WL.store.bumpLog('pr', 1);
+      WL.store.flush();
+      if (WL.sync) WL.sync.markDirty();
+      return;
+    }
+    if (cur.from === 'sprint') {
+      // 冲刺：答对不动调度——提前复习不该把间隔推远；
+      // 答错写遗忘记录，让该词提前回到复习队列。
+      if (ok) {
+        s.right++;
+      } else {
+        s.wrong++;
+        var nowS = Date.now();
+        var progS = WL.store.getProgress(s.bookId);
+        var stS = progS[cur.wid];
+        var wordS = wordOf(cur.wid);
+        if (!stS) {
+          stS = WL.srs.newState(wordS, nowS);
+          progS[cur.wid] = stS;
+        }
+        WL.srs.review(stS, s.q ? s.q.channel : 'r', false, nowS);
+        WL.store.putProgress(s.bookId, cur.wid, stS);
+      }
       WL.store.bumpLog('pr', 1);
       WL.store.flush();
       if (WL.sync) WL.sync.markDirty();
@@ -865,13 +965,34 @@ window.WL = window.WL || {};
     var estText = dueLimited + newCount > 0
       ? estParts.join(' · ') + ' · 约 ' + estMin + ' 分钟'
       : '今天没有待学内容';
-    startCard.appendChild(h(
-      '<div class="spread" style="margin-bottom:14px">' +
-      '<div><div style="font-size:16px">今天的学习</div>' +
-      '<div class="small muted">' + estText + '</div></div>' +
-      '<div class="small muted" style="white-space:nowrap">上限 新' + cfg.newLimit + ' / 复' + cfg.reviewLimit + '</div>' +
-      '</div>'
-    ));
+
+    // 今日完成度：已学 ÷ 今日总计划（剩余新学配额 + 剩余到期复习，已完成的不再重复计）
+    var doneToday = today.nw + today.rv;
+    var planToday = doneToday + Math.max(0, cfg.newLimit - today.nw) + Math.min(dueN, cfg.reviewLimit);
+    var ringFrac = planToday > 0 ? Math.min(1, doneToday / planToday) : 0;
+    if (planToday > 0 && ringFrac >= 1) WL.store.grantFreezeIfEligible();
+
+    var head = el('div', 'spread');
+    head.style.marginBottom = '14px';
+    var headL = el('div');
+    headL.appendChild(h('<div style="font-size:16px">今天的学习</div>'));
+    headL.appendChild(h('<div class="small muted">' + estText + '</div>'));
+    head.appendChild(headL);
+    var inv = WL.store.freezeInventory();
+    var ring = el('span');
+    ring.title = '今日目标 ' + Math.round(ringFrac * 100) + '% · 新学 ' + today.nw + '/' + cfg.newLimit +
+      ' · 连续 ' + WL.store.streakDays() + ' 天 · 连胜保护 × ' + inv;
+    var circ = (2 * Math.PI * 22).toFixed(1);
+    var full = ringFrac >= 1;
+    ring.innerHTML = '<svg width="56" height="56" viewBox="0 0 56 56">' +
+      '<circle cx="28" cy="28" r="22" fill="none" stroke="#DFE3EA" stroke-width="7"/>' +
+      '<circle cx="28" cy="28" r="22" fill="none" stroke="' + (full ? '#2E7D6E' : '#2F6BD4') + '" stroke-width="7" ' +
+      'stroke-linecap="round" stroke-dasharray="' + (circ * ringFrac).toFixed(1) + ' ' + circ + '" ' +
+      'transform="rotate(-90 28 28)"/>' +
+      '<text x="28" y="32" text-anchor="middle" font-size="13" font-weight="600" fill="#2B2E33">' +
+      (full ? '✓' : Math.round(ringFrac * 100) + '%') + '</text></svg>';
+    head.appendChild(ring);
+    startCard.appendChild(head);
 
     var goRow = el('div', 'learn-actions');
     var ro = el('button', 'btn lg btn-go', '复习');
@@ -949,6 +1070,39 @@ window.WL = window.WL || {};
     pc.appendChild(pgo);
     wrap.appendChild(pc);
 
+    // 考前冲刺：提前过即将到期的词；答对不动调度，答错才提前安排
+    var sc = el('div', 'card');
+    sc.appendChild(el('h2', 'section', '考前冲刺'));
+    sc.appendChild(h('<div class="small muted" style="margin-bottom:14px">把即将到期的词按紧迫程度提前过一遍。' +
+      '答对不打乱原复习计划，答错的词会提前安排复习。适合考试前集中排查，平时不必天天用。</div>'));
+    sc.appendChild(h('<div class="small muted" style="margin:0 0 8px">范围</div>'));
+    sc.appendChild(segGroup([
+      ['7', '未来 7 天到期'], ['14', '未来 14 天'], ['30', '未来 30 天'], ['all', '全部已学词']
+    ], sprintSel.range, function (v) { sprintSel.range = v; render(); }));
+
+    var sprintPool = 0;
+    (function () {
+      var nowS = Date.now();
+      var horizon = sprintSel.range === 'all' ? Infinity : nowS + Number(sprintSel.range) * WL.srs.DAY;
+      book.words.forEach(function (w) {
+        var st = prog[w.id];
+        if (!st || st.cut) return;
+        for (var i = 0; i < chs.length; i++) {
+          var c = st.ch[chs[i]];
+          if (c && c.n > 0 && c.due && c.due <= horizon) { sprintPool++; return; }
+        }
+      });
+    })();
+    sc.appendChild(h('<div class="small muted" style="margin:14px 0 0">匹配 ' + sprintPool + ' 词' +
+      (sprintPool > SPRINT_SIZE ? '（一轮最多 ' + SPRINT_SIZE + ' 个，按到期先后取最急的）' : ' · 按到期先后排序，最急的优先') + '</div>'));
+
+    var sgo = el('button', 'btn primary block', '开始冲刺');
+    sgo.style.marginTop = '18px';
+    if (!sprintPool || !learned) sgo.disabled = true;
+    sgo.onclick = function () { startSprint(sprintSel.range); };
+    sc.appendChild(sgo);
+    wrap.appendChild(sc);
+
     return wrap;
   }
 
@@ -982,7 +1136,8 @@ window.WL = window.WL || {};
     var stage = s.retryCard ? '回顾'
       : s.phase === 'spell' ? '拼写'
       : s.phase === 'quiz' ? '新学'
-      : s.phase === 'practice' ? '练习' : '复习';
+      : s.phase === 'practice' ? '练习'
+      : s.phase === 'sprint' ? '冲刺' : '复习';
     var where;
     if (s.phase === 'quiz') {
       where = '第 ' + (s.li + 1) + ' / ' + s.learn.length + ' 词';
@@ -1032,6 +1187,18 @@ window.WL = window.WL || {};
       cutR.onclick = cutCurrent;
       exitR.appendChild(cutR);
       wrap.appendChild(exitR);
+    }
+
+    if (s.phase === 'sprint' && !s.retryCard) {
+      var exitS = el('div', 'study-exit');
+      var cutS = el('button', 'btn ghost', '斩');
+      cutS.title = '斩：这个词不再进入后续复习';
+      cutS.onclick = cutCurrent;
+      exitS.appendChild(cutS);
+      var quitS = el('button', 'btn ghost', '结束冲刺');
+      quitS.onclick = finishSprint;
+      exitS.appendChild(quitS);
+      wrap.appendChild(exitS);
     }
 
     if (s.phase === 'practice' && !s.retryCard) {
@@ -1383,7 +1550,24 @@ window.WL = window.WL || {};
     card.style.textAlign = 'center';
     var totalDone = s.right + s.wrong;
 
-    if (s.practiceMode) {
+    if (s.sprintMode) {
+      var minsS = Math.max(1, Math.round((Date.now() - s.t0) / 60000));
+      card.appendChild(h('<div class="finish-title">考前冲刺完成</div>'));
+      card.appendChild(h('<div class="muted small">用时约 ' + minsS + ' 分钟' +
+        (s.wrong ? ' · ' + s.wrong + ' 个答错的词已提前安排复习' : ' · 这一轮没有答错的词') + '</div>'));
+      card.appendChild(clayArt('sparkles_3d.png'));
+      card.appendChild(h(
+        '<div class="overview" style="grid-template-columns:repeat(3,1fr)">' +
+        '<div class="ov-cell"><div class="ov-num">' + s.right + '</div><div class="ov-label">答对</div></div>' +
+        '<div class="ov-cell"><div class="ov-num">' + s.wrong + '</div><div class="ov-label">答错</div></div>' +
+        '<div class="ov-cell"><div class="ov-num">' + (totalDone ? Math.round(s.right / totalDone * 100) : 0) + '%</div><div class="ov-label">正确率</div></div>' +
+        '</div>'
+      ));
+
+      var againS = el('button', 'btn primary block lg', '再冲一轮');
+      againS.onclick = function () { startSprint(s.sprintRange || '7'); };
+      card.appendChild(againS);
+    } else if (s.practiceMode) {
       var todayPr = WL.store.getToday().pr || 0;
       card.appendChild(h('<div class="finish-title">本轮练习完成</div>'));
       card.appendChild(h('<div class="muted small">今天累计练习 ' + todayPr + ' 题</div>'));
@@ -2579,15 +2763,20 @@ window.WL = window.WL || {};
       return;
     }
 
+    // 连胜保护：先把缺失的天用库存冻结补上（可能不止一张），再谈断点续学
+    var frozenUsed = WL.store.applyStreakFreezes();
+
     // 断点续学：有未完成会话快照时先询问
     var saved = WL.store.getSession();
     if (saved && saved._v === 1 && saved.phase && saved.phase !== 'done' && !saved.ended) {
       S.session = saved;
       S.view = 'resume';
       render();
+      if (frozenUsed) toast('自动使用了 ' + frozenUsed + ' 张连胜保护，连续 ' + WL.store.streakDays() + ' 天保住了');
       return;
     }
     render();
+    if (frozenUsed) toast('自动使用了 ' + frozenUsed + ' 张连胜保护，连续 ' + WL.store.streakDays() + ' 天保住了');
     WL.sync.run(true).then(function (r) {
       if (!r.ok) {
         // 令牌被撤销/过期时锁回登录页；纯网络问题不锁，离线也能继续学

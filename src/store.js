@@ -102,7 +102,7 @@ window.WL = window.WL || {};
   function bumpLog(field, n) {
     var log = getLog();
     var k = todayKey();
-    if (!log[k]) log[k] = { nw: 0, rv: 0, ok: 0, bad: 0, ms: 0, pr: 0 };
+    if (!log[k]) log[k] = { nw: 0, rv: 0, ok: 0, bad: 0, ms: 0, pr: 0, fzg: 0, fz: 0 };
     log[k][field] = (log[k][field] || 0) + (n == null ? 1 : n);
     writeJSON(K.log, log);
     return log[k];
@@ -120,7 +120,8 @@ window.WL = window.WL || {};
     for (var i = 0; i < 400; i++) {
       var k = todayKey(d);
       var rec = log[k];
-      if (rec && (rec.nw + rec.rv + (rec.pr || 0)) > 0) {
+      // 被连胜保护冻结的天也算作连续（那天是靠保护撑过去的）
+      if (rec && ((rec.nw + rec.rv + (rec.pr || 0)) > 0 || rec.fz)) {
         n++;
       } else if (i > 0) {
         break;
@@ -128,6 +129,59 @@ window.WL = window.WL || {};
       d.setDate(d.getDate() - 1);
     }
     return n;
+  }
+
+  /* ---------- 连胜保护 ----------
+     日志字段：fzg=当天获得一枚，fz=当天的连续天数靠一枚保护撑过去。
+     库存 = Σfzg − Σfz，随日志同步，两台机器按天取 max 合并，天然一致。
+     上限 2 枚（Duolingo 同款上限）；每完成当日目标（新学配额 + 清空到期）得一枚。 */
+
+  var FREEZE_CAP = 2;
+
+  function freezeInventory(log) {
+    log = log || getLog();
+    var n = 0;
+    Object.keys(log).forEach(function (k) {
+      n += (log[k].fzg || 0) - (log[k].fz || 0);
+    });
+    return n;
+  }
+
+  // 当日目标完成后调用；每天最多发一枚，库存封顶
+  function grantFreezeIfEligible() {
+    var log = getLog();
+    var k = todayKey();
+    var rec = log[k];
+    if (rec && rec.fzg) return false;
+    if (freezeInventory(log) >= FREEZE_CAP) return false;
+    if (!log[k]) log[k] = { nw: 0, rv: 0, ok: 0, bad: 0, ms: 0, pr: 0, fzg: 0, fz: 0 };
+    log[k].fzg = 1;
+    writeJSON(K.log, log);
+    return true;
+  }
+
+  // 补卡：从昨天向前，把缺失的连续天用库存逐一冻结，库存用尽即 streak 真正断掉
+  // 返回本次消耗的张数
+  function applyStreakFreezes() {
+    var log = getLog();
+    var inv = freezeInventory(log);
+    if (inv <= 0) return 0;
+    var used = 0;
+    var d = new Date();
+    d.setDate(d.getDate() - 1);
+    for (var i = 0; i < 60; i++) {
+      var k = todayKey(d);
+      var rec = log[k];
+      if (rec && ((rec.nw + rec.rv + (rec.pr || 0)) > 0)) break;   // 活动日：连续成立到这里
+      if (rec && rec.fz) { d.setDate(d.getDate() - 1); continue; } // 已冻结的天：继续往前查
+      if (inv <= 0) break;                                          // 缺失天且无库存：真断了
+      log[k] = { nw: 0, rv: 0, ok: 0, bad: 0, ms: 0, pr: 0, fzg: 0, fz: 1 };
+      inv--;
+      used++;
+      d.setDate(d.getDate() - 1);
+    }
+    if (used) writeJSON(K.log, log);
+    return used;
   }
 
   function exportAll() {
@@ -264,6 +318,9 @@ window.WL = window.WL || {};
     getToday: getToday,
     todayKey: todayKey,
     streakDays: streakDays,
+    freezeInventory: freezeInventory,
+    grantFreezeIfEligible: grantFreezeIfEligible,
+    applyStreakFreezes: applyStreakFreezes,
     exportAll: exportAll,
     importAll: importAll,
     resetBook: resetBook,

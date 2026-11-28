@@ -217,5 +217,63 @@ const fcS = WL.srs.forecast({}, nowS, 30, ['r'], dues);
 ok('模拟到期并入预测总量', fcS.reduce(function (a, b) { return a + b; }, 0) === dues.length, JSON.stringify(fcS));
 ok('学习从明天开始，今天桶为空', (fcS[0] || 0) === 0, 'fcS[0]=' + fcS[0]);
 
+console.log('\n[9] 连胜保护（store 层，独立 localStorage 桩）');
+const lsData = {};
+const lsStub = {
+  getItem: k => (k in lsData ? lsData[k] : null),
+  setItem: (k, v) => { lsData[k] = String(v); },
+  removeItem: k => { delete lsData[k]; }
+};
+const ctx2 = { window: {}, console, localStorage: lsStub };
+vm.createContext(ctx2);
+vm.runInContext(fs.readFileSync(path.join(root, 'src/store.js'), 'utf8'), ctx2, { filename: 'src/store.js' });
+const ST = ctx2.window.WL.store;
+
+function keyN(n) { return ST.todayKey(new Date(Date.now() - n * DAY)); }
+function seedDay(n, fields) {
+  const log = ST.getLog();
+  log[keyN(n)] = Object.assign({ nw: 0, rv: 0, ok: 0, bad: 0, ms: 0, pr: 0, fzg: 0, fz: 0 }, fields || {});
+  lsData['wl.log.v1'] = JSON.stringify(log);
+}
+
+// 场景 A：前 4 天有活动，昨天缺失，库存 1（前天获得）
+lsData['wl.log.v1'] = '{}';
+seedDay(2, { nw: 10, rv: 5, fzg: 1 });
+seedDay(3, { nw: 10 });
+seedDay(4, { nw: 10 });
+seedDay(5, { nw: 10 });
+ok('库存 = Σfzg − Σfz', ST.freezeInventory() === 1, String(ST.freezeInventory()));
+const usedA = ST.applyStreakFreezes();
+ok('缺失的昨天被冻结补上', usedA === 1, 'used=' + usedA);
+ok('冻结日计入连续天数（4 天缺口变 5 天连续）', ST.streakDays() === 5, 'streak=' + ST.streakDays());
+ok('重复执行不重复消耗', ST.applyStreakFreezes() === 0);
+
+// 场景 B：连续两天缺失但只有一张保护 → 只补最近一天，更早的那天仍断
+// （库存来源放在更早的有活动日：day-6）
+lsData['wl.log.v1'] = '{}';
+seedDay(4, { nw: 10 });
+seedDay(6, { nw: 10, fzg: 1 });
+const usedB = ST.applyStreakFreezes();
+ok('只有一张保护只补一天', usedB === 1, 'used=' + usedB);
+ok('更早的缺口令连续中断（只数到冻结那天）', ST.streakDays() === 1, 'streak=' + ST.streakDays());
+
+// 场景 C：库存上限 2，满了不再发
+lsData['wl.log.v1'] = '{}';
+seedDay(2, { nw: 10, fzg: 1 });
+seedDay(3, { nw: 10, fzg: 1 });
+seedDay(4, { nw: 10 });
+ok('库存到 2 后不再发放', ST.grantFreezeIfEligible() === false);
+lsData['wl.log.v1'] = '{}';
+seedDay(2, { nw: 10 });
+ok('库存不足时可以发放', ST.grantFreezeIfEligible() === true);
+ok('同一天不重复发放', ST.grantFreezeIfEligible() === false);
+
+// 场景 D：fzg / fz 字段在同步合并后保留（库存跨设备一致）
+const mergedD = WL.sync.mergeLog(
+  { '2026-11-20': { fzg: 1 } },
+  { '2026-11-20': { fz: 1 }, '2026-11-21': { fzg: 1 } }
+);
+ok('合并保留 fzg/fz 字段', mergedD['2026-11-20'].fzg === 1 && mergedD['2026-11-20'].fz === 1 && mergedD['2026-11-21'].fzg === 1);
+
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败\n');
 process.exit(fail ? 1 : 0);
