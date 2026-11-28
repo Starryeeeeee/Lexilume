@@ -2545,6 +2545,36 @@ window.WL = window.WL || {};
     top.appendChild(rep);
     wrap.appendChild(top);
 
+    // 累计：直接由每日日志求和，换词表、清空单本进度都不会清零
+    var log = WL.store.getLog();
+    var cum = { nw: 0, rv: 0, pr: 0, ms: 0, days: 0 };
+    Object.keys(log).forEach(function (k) {
+      var r = log[k];
+      cum.nw += r.nw || 0;
+      cum.rv += r.rv || 0;
+      cum.pr += r.pr || 0;
+      cum.ms += r.ms || 0;
+      if ((r.nw || 0) + (r.rv || 0) + (r.pr || 0) > 0) cum.days++;
+    });
+    var cumMin = Math.round(cum.ms / 60000);
+    var cumTime = cumMin >= 60
+      ? Math.floor(cumMin / 60) + ' 小时 ' + (cumMin % 60) + ' 分'
+      : cumMin + ' 分钟';
+
+    var cumCard = el('div', 'card');
+    cumCard.appendChild(el('h2', 'section', '累计'));
+    cumCard.appendChild(h(
+      '<div class="overview" style="margin-bottom:0">' +
+      '<div class="ov-cell"><div class="ov-num">' + cum.nw + '</div><div class="ov-label">累计新学</div></div>' +
+      '<div class="ov-cell"><div class="ov-num">' + cum.rv + '</div><div class="ov-label">累计复习</div></div>' +
+      '<div class="ov-cell"><div class="ov-num">' + cum.pr + '</div><div class="ov-label">累计练习</div></div>' +
+      '<div class="ov-cell"><div class="ov-num">' + cum.days + '</div><div class="ov-label">学习天数</div></div>' +
+      '</div>'
+    ));
+    cumCard.appendChild(h('<div class="small muted" style="margin-top:14px">累计用时约 ' + cumTime +
+      '。单位是词次：同一个词被清空进度后重新学过会再计一次；换词表或清空单本进度不会清零。</div>'));
+    wrap.appendChild(cumCard);
+
     var prog = WL.store.getProgress(book.id);
     var now = Date.now();
     var chs = activeChannels();
