@@ -84,7 +84,8 @@ word, 音标, 词性, 释义, 例句, 例句翻译
 2. Actions 页面若提示工作流被禁用，点 `I understand my workflows, go ahead and enable them`。
 
 日常不需要管。想补某一天或换一篇文章：Actions → 每日时文词 → Run workflow，
-可填日期、文章 URL，勾 `force` 覆盖当天。失败会自己开一个 `daily-words` 标签的 issue。
+可填日期、文章 URL，勾 `force` 覆盖当天。失败只会维护一个 `daily-words` 标签的 issue
+（同一个 issue 里按天追加记录，恢复正常后自动关闭），不会一天刷一个。
 
 本地演练（不发布、不消耗仓库）：
 

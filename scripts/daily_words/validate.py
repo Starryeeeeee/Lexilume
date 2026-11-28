@@ -40,6 +40,13 @@ SENTENCE_MATCH_THRESHOLD = 0.82
 # 卡死到 1 会让整批反复不过；2 是可接受的折中，提示词里仍要求尽量一句一词。
 MAX_WORDS_PER_EXAMPLE = 2
 
+# 这些词虽然长得像屈折形式，本身却是独立词条，不能还原
+LEMMA_EXCEPTIONS = {
+    "united", "learned", "aged", "beloved", "wicked", "naked", "sacred",
+    "rugged", "crooked", "talented", "gifted", "biased", "detailed",
+    "sophisticated", "excited", "interested", "used", "based", "advanced",
+}
+
 
 def compare_norm(text: str) -> str:
     """用于比对的归一化：小写、去引号、统一破折号、折叠空白。"""
@@ -281,6 +288,40 @@ def _single_sentence(text: str, form: str) -> str:
     return parts[0]
 
 
+def _lemma_candidates(word: str) -> list[str]:
+    """列出可能的原形，只覆盖真实构词规律。"""
+    out: list[str] = []
+    if word.endswith("ies") and len(word) > 4:
+        out.append(word[:-3] + "y")
+    if word.endswith("ied") and len(word) > 4:
+        out.append(word[:-3] + "y")
+    if word.endswith("es") and len(word) > 3:
+        out += [word[:-2], word[:-1]]
+    if word.endswith("s") and not word.endswith("ss") and len(word) > 3:
+        out.append(word[:-1])
+    if word.endswith("ing") and len(word) > 5:
+        stem = word[:-3]
+        out += [stem, stem + "e"]
+        if len(stem) > 2 and stem[-1] == stem[-2]:
+            out.append(stem[:-1])
+    if word.endswith("ed") and len(word) > 3:
+        stem = word[:-2]
+        out += [stem, stem + "e"]
+        if len(stem) > 2 and stem[-1] == stem[-2]:
+            out.append(stem[:-1])
+    return [c for c in out if len(c) >= 3 and c != word]
+
+
+def lemma_of(word: str, vocab: set[str] | None) -> str | None:
+    """在已知词库里能对上的原形；对不上就返回 None（不硬猜）。"""
+    if not vocab or word in LEMMA_EXCEPTIONS:
+        return None
+    for cand in _lemma_candidates(word):
+        if cand in vocab:
+            return cand
+    return None
+
+
 def _drop(dropped: list[dict], word: str, reason: str) -> None:
     dropped.append({"word": word, "reason": reason})
 
@@ -291,6 +332,7 @@ def validate_words(
     *,
     count_min: int = config.WORDS_MIN,
     count_max: int = config.WORDS_MAX,
+    vocab: set[str] | None = None,
 ) -> tuple[list[dict], list[str], list[str], list[dict]]:
     words: list[dict] = []
     errors: list[str] = []
@@ -319,6 +361,10 @@ def validate_words(
             continue
         if word in config.COMMON_WORD_BLOCKLIST:
             _drop(dropped, word, "过于基础的常用词，不值得占用名额")
+            continue
+        base = lemma_of(word, vocab)
+        if base:
+            _drop(dropped, word, f"{word} 是屈折形式，词条要写原形 {base}（音标也按原形给）")
             continue
         if word in seen:
             warnings.append(f"重复词已合并：{word}")
@@ -427,6 +473,7 @@ def validate(
     url: str,
     count_min: int = config.WORDS_MIN,
     count_max: int = config.WORDS_MAX,
+    vocab: set[str] | None = None,
 ) -> Validation:
     """对模型整份输出做校验。date/source/url 一律以我方抓取结果为准，不信模型。"""
     result = Validation()
@@ -436,7 +483,7 @@ def validate(
 
     index = BodyIndex.build(body)
     words, errors, warnings, dropped = validate_words(
-        obj.get("words"), index, count_min=count_min, count_max=count_max,
+        obj.get("words"), index, count_min=count_min, count_max=count_max, vocab=vocab,
     )
     result.errors.extend(errors)
     result.warnings.extend(warnings)

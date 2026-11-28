@@ -89,5 +89,60 @@ class PublishTest(unittest.TestCase):
                 publish.repo_parts("")
 
 
+class FailureIssueTest(unittest.TestCase):
+    """失败告警只维护一个滚动 issue：不按日期开新、成功后自动关。"""
+
+    def setUp(self):
+        patcher = mock.patch.object(publish.config, "GITHUB_REPOSITORY", "o/r")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.calls = []
+
+    def _fake(self, open_issues):
+        def handler(method, path, payload=None, token=None, retries=3):
+            self.calls.append((method, path, payload))
+            if method == "GET" and "/issues?" in path:
+                return FakeResponse(200, open_issues)
+            if method == "POST" and path.endswith("/labels"):
+                return FakeResponse(201, {})
+            if method == "POST" and path.endswith("/issues"):
+                return FakeResponse(201, {"number": 42})
+            return FakeResponse(201, {})
+        return handler
+
+    def test_creates_single_issue_with_fixed_title(self):
+        with mock.patch.object(publish.net, "github_api", side_effect=self._fake([])):
+            msg = publish.report_failure("2026-11-28", "日志")
+        self.assertIn("42", msg)
+        created = [c for c in self.calls if c[0] == "POST" and c[1].endswith("/issues")]
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0][2]["title"], publish.FAILURE_TITLE)
+        self.assertNotIn("2026-11-28", created[0][2]["title"])
+
+    def test_appends_comment_when_issue_open(self):
+        issue = {"number": 7, "title": publish.FAILURE_TITLE}
+        with mock.patch.object(publish.net, "github_api", side_effect=self._fake([issue])):
+            msg = publish.report_failure("2026-11-29", "日志")
+        self.assertIn("#7", msg)
+        self.assertFalse([c for c in self.calls if c[0] == "POST" and c[1].endswith("/issues")])
+        comments = [c for c in self.calls if c[1].endswith("/issues/7/comments")]
+        self.assertEqual(len(comments), 1)
+
+    def test_recovery_closes_issue(self):
+        issue = {"number": 7, "title": publish.FAILURE_TITLE}
+        with mock.patch.object(publish.net, "github_api", side_effect=self._fake([issue])):
+            msg = publish.report_recovery("2026-11-29", 12)
+        self.assertIn("#7", msg)
+        patch_calls = [c for c in self.calls if c[0] == "PATCH"]
+        self.assertEqual(len(patch_calls), 1)
+        self.assertEqual(patch_calls[0][2]["state"], "closed")
+
+    def test_recovery_noop_without_issue(self):
+        with mock.patch.object(publish.net, "github_api", side_effect=self._fake([])):
+            msg = publish.report_recovery("2026-11-29", 12)
+        self.assertEqual(msg, "")
+        self.assertFalse([c for c in self.calls if c[0] == "PATCH"])
+
+
 if __name__ == "__main__":
     unittest.main()

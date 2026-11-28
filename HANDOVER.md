@@ -152,12 +152,14 @@ HANDOVER.md           本文档
 18. **难度的「一句一词」不能卡死**：模型天然爱从一条长句里抠 3 个词，强制 1 个会导致整批反复不过。放宽到 2，提示词仍要求尽量一句一词。
 19. **词表发布不要 `git push`**：网站每 20 多秒推一次 `progress.json`，本地 push 必冲突。用 Contents API 单文件提交（`scripts/daily_words/publish.py`），天然基于最新 HEAD，还自带幂等。
 20. **模型会把词性写成 `n. v.`**（空格分隔）：词性解析要按空白也切分，否则整条被判非法。
+21. **模型会把屈折形式当词条**（2026-11-28 实际发生）：`pitted /pɪt/`、`tied`、`excluded`、`restricting` 全被写成词条，音标却是原形的，卡片会对不上。修法：提示词里给出「pitted→pit」这类具体对照（光说"用原形"不管用），再加一道 `lemma_of()` 闸门——用 9692 词的已知词库当白名单，只有能对上的才判为屈折形式并剔除点名，避免把 `united` 误还原成 `unit`。另设 `LEMMA_EXCEPTIONS` 兜住 united/biased/sophisticated 这类本身是形容词的词。
+22. **音标仍可能出错**：词库里的音标是「'」和 `(ə)` 那套旧记法，不能直接覆盖模型的 IPA（`examine` 甚至带 `/ eg-/`）。实测 9 个词里 1 个错（require 写成 /rɪˈkɪə/）。目前只记在产物里，人工发现可 `force` 重生成。
 
 ## 七、验证手段（改完必跑）
 
 ```bash
 node tools/selftest.js          # 48 项，全过才算动过核心
-python -m unittest discover -s scripts/tests -t .   # 每日时文词生成器 67 项
+python -m unittest discover -s scripts/tests -t .   # 每日时文词生成器 78 项
 ```
 
 2026-11-14 做过一轮浏览器端全流程实测（本地 http 服务 + 自动答题驱动），覆盖：学一个测一个、答错退回重考、复习段优先、拼写环节开始/跳过/错词重拼、结算对账、调度双通道落库。改会话流程时建议照此重测。注意：浏览器自动化工具（node_repl/IAB）不一定有；没有时靠 selftest + 用户网页验收。
@@ -173,7 +175,7 @@ python -m unittest discover -s scripts/tests -t .   # 每日时文词生成器 6
   - `learner.py` 学情（四档阈值与 `srs.js` 严格对齐）＋ 难度阶梯 ＋ 排除词（只保留正文中出现的，提示词才不会爆）
   - `llm.py` Agnes 调用（`response_format=json_object`）＋ 校验失败回喂错误重写，最多 2 轮
   - `validate.py` 契约闸门：单词、正文出现（派生词形）、音标、词性、释义长度、例句对齐、一句一词
-  - `publish.py` Contents API 提交（幂等、409/422 重试）＋失败开 issue
+  - `publish.py` Contents API 提交（幂等、409/422 重试）＋失败写单一滚动 issue（成功后自动关）
   - `report.py` Step Summary
 - 幂等：远端已有当天文件直接退出，先于任何抓取，省 token 也防重复消耗
 - 兜底：每天跑两次（06:00 / 07:30，第二次幂等秒退）；单次内先用 3.0、失败退 2.5；

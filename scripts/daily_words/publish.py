@@ -116,33 +116,50 @@ def _ensure_label(token: str | None) -> None:
 
 
 def open_failure_issue(title: str, body: str, token: str | None = None) -> str:
-    """失败时开一个 issue；已存在同名未关闭 issue 就追加评论。返回结果描述。"""
+    """兼容旧调用：转交给滚动 issue 的实现。"""
+    return report_failure(title, body, token=token)
+
+
+FAILURE_TITLE = "[daily] 时文词生成失败"
+
+
+def _find_open_failure_issue(token: str | None = None) -> dict | None:
+    """找那个唯一开着的失败 issue（不按日期区分，避免一天一个）。"""
     owner, name = repo_parts()
+    resp = net.github_api(
+        "GET",
+        f"/repos/{owner}/{name}/issues?state=open&labels=daily-words&per_page=50",
+        token=token,
+    )
+    if resp.status != 200:
+        return None
+    for issue in resp.json() or []:
+        if issue.get("pull_request"):
+            continue
+        if (issue.get("title") or "").strip() == FAILURE_TITLE:
+            return issue
+    return None
+
+
+def report_failure(date: str, body: str, token: str | None = None) -> str:
+    """失败告警：只维护一个滚动 issue，已有就追加评论，不再一天开一个。"""
+    owner, name = repo_parts()
+    entry = f"### {date} 生成失败\n\n{body}"
     try:
         _ensure_label(token)
-        resp = net.github_api(
-            "GET",
-            f"/repos/{owner}/{name}/issues?state=open&labels=daily-words&per_page=50",
-            token=token,
-        )
-        existing = None
-        if resp.status == 200:
-            for issue in resp.json() or []:
-                if (issue.get("title") or "").strip() == title:
-                    existing = issue
-                    break
+        existing = _find_open_failure_issue(token)
         if existing:
             net.github_api(
                 "POST",
                 f"/repos/{owner}/{name}/issues/{existing['number']}/comments",
-                payload={"body": body},
+                payload={"body": entry},
                 token=token,
             )
-            return f"已在 issue #{existing['number']} 追加说明"
+            return f"已在 issue #{existing['number']} 追加 {date} 的失败记录"
         resp = net.github_api(
             "POST",
             f"/repos/{owner}/{name}/issues",
-            payload={"title": title, "body": body, "labels": ["daily-words"]},
+            payload={"title": FAILURE_TITLE, "body": entry, "labels": ["daily-words"]},
             token=token,
         )
         if resp.status in (200, 201):
@@ -150,3 +167,28 @@ def open_failure_issue(title: str, body: str, token: str | None = None) -> str:
         return f"创建 issue 失败：HTTP {resp.status}"
     except (PublishError, net.NetworkError, json.JSONDecodeError) as exc:
         return f"创建 issue 失败：{exc}"
+
+
+def report_recovery(date: str, words: int, token: str | None = None) -> str:
+    """恢复正常后自动关掉滚动 issue；没有开着的就什么都不做。"""
+    owner, name = repo_parts()
+    try:
+        existing = _find_open_failure_issue(token)
+        if not existing:
+            return ""
+        number = existing["number"]
+        net.github_api(
+            "POST",
+            f"/repos/{owner}/{name}/issues/{number}/comments",
+            payload={"body": f"{date} 已恢复：成功生成 {words} 词，问题可以关掉了。"},
+            token=token,
+        )
+        net.github_api(
+            "PATCH",
+            f"/repos/{owner}/{name}/issues/{number}",
+            payload={"state": "closed", "state_reason": "completed"},
+            token=token,
+        )
+        return f"已关闭 issue #{number}"
+    except (PublishError, net.NetworkError, json.JSONDecodeError) as exc:
+        return f"关闭 issue 失败：{exc}"

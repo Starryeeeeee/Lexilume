@@ -98,12 +98,13 @@ def _choose_article(ctx, date_str: str, args, tried: list[str]) -> article_mod.A
     return art
 
 
-def _generate_with_models(ctx, art, profile, exclusions, date_str, count, ratio_text, args):
+def _generate_with_models(ctx, art, profile, exclusions, date_str, count, ratio_text, args, vocab=None):
     """先用首选模型，失败再退到备用模型；两者都失败才抛异常。"""
     def run(client):
         return llm.select_words(
             client, art, profile, exclusions,
-            date=date_str, count=count, ratio_text=ratio_text, log=ctx.log,
+            date=date_str, count=count, ratio_text=ratio_text,
+            vocab=vocab, log=ctx.log,
         )
 
     client = llm.AgnesClient(model=args.model)
@@ -157,9 +158,10 @@ def main(argv=None) -> int:
             if sha and not args.force:
                 ctx.log(f"远端已存在 {rel_path}，跳过（幂等）")
                 ctx.info["result"] = "exists"
+                _recover(date, 0, publish_enabled, ctx)
                 report.emit(ctx, root)
                 return EXIT_OK
-    except (publish.PublishError, Exception) as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         ctx.log(f"幂等检查失败，继续尝试生成：{exc}")
 
     if local_path.exists() and not args.force and not args.dry_run:
@@ -168,17 +170,20 @@ def main(argv=None) -> int:
         report.emit(ctx, root)
         return EXIT_OK
 
-    if not (args.offline_article or args.url):
-        if not config.AGNES_API_KEY:
-            ctx.log("配置缺失：没有 AGNES_API_KEY（仓库 Settings → Secrets 里加一个）")
-            ctx.info["result"] = "config-error"
-            report.emit(ctx, root, failed=True)
-            _notify_failure(date, "\n".join(ctx.lines), root)
-            return EXIT_CONFIG
+    # 没有 Key 就一定跑不出结果，先拦下来并说清楚怎么补（--url 也不例外）
+    if not config.AGNES_API_KEY and not args.offline_article:
+        ctx.log("配置缺失：没有 AGNES_API_KEY（仓库 Settings → Secrets and variables → Actions 里加一个）")
+        ctx.info["result"] = "config-error"
+        report.emit(ctx, root, failed=True)
+        _notify_failure(date, "\n".join(ctx.lines), root)
+        return EXIT_CONFIG
 
     # ---------------------------------------------------------- 2. 学情
     progress = learner.load_progress(root / config.PROGRESS_PATH)
     index = learner.load_word_index(root)
+    # 已知词库（约 9700 词）用来判断「屈折形式该还原成哪个原形」，
+    # 只在能对上时才判，避免把 united 还原成 unit 这类误伤
+    vocab = {w.lower() for w in index.values() if w}
     now_ms = config.today_cn().timestamp() * 1000
     profile = learner.build_profile(progress, index, now_ms)
     history = learner.read_daily_history(root / config.DAILY_DIR, progress)
@@ -220,7 +225,8 @@ def main(argv=None) -> int:
 
         try:
             client, selection = _generate_with_models(
-                ctx, art, profile, exclusions, date, count, ratio_text, args
+                ctx, art, profile, exclusions, date, count, ratio_text, args,
+                vocab=vocab,
             )
             break
         except Exception as exc:  # noqa: BLE001
@@ -299,8 +305,21 @@ def main(argv=None) -> int:
         ctx.log("未配置 GitHub token 或已禁用发布：仅保留本地文件")
         ctx.info["publish"] = {"status": "skipped"}
 
+    _recover(date, len(book["words"]), publish_enabled, ctx)
     report.emit(ctx, root)
     return EXIT_OK
+
+
+def _recover(date: str, words: int, enabled: bool, ctx) -> None:
+    """成功时关掉那个滚动失败 issue；失败不该阻断主流程，异常一律吞掉。"""
+    if not enabled:
+        return
+    try:
+        msg = publish.report_recovery(date, words)
+        if msg:
+            ctx.log(f"告警恢复：{msg}")
+    except Exception as exc:  # noqa: BLE001
+        ctx.log(f"关闭失败告警时出错（忽略）：{exc}")
 
 
 def _notify_failure(date: str, log_text: str, root: Path) -> None:
@@ -317,7 +336,7 @@ def _notify_failure(date: str, log_text: str, root: Path) -> None:
         + (f"\n运行日志：{run_url}\n" if run_url else "")
         + "\n处理方式：在 Actions 里手动触发 `每日时文词`，可指定 `article_url` 或 `force` 重试。\n"
     )
-    msg = publish.open_failure_issue(f"[daily] {date} 时文词生成失败", body)
+    msg = publish.report_failure(date, body)
     print(f"告警：{msg}", flush=True)
 
 

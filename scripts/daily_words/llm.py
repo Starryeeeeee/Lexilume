@@ -186,6 +186,7 @@ def build_messages(article, profile, exclusions, count: int, ratio_text: str) ->
 3. 排除专有名词、地名、机构名、缩写（如 CPC、APEC、GDP、US）与超纲生僻词。
 4. word 只能是单个英文单词（可含连字符或撇号），不要选短语、不要选词组。
 5. 词条写原形：动词给原形、名词给单数、形容词给原级。正文只出现屈折形式时（如 carrying、enduring），word 仍写原形（carry、endure），example 保留正文原句；只有不规则变化（built、said）或无法还原时才直接用正文里的形式。
+   - 常见错误示例（务必按右边写）：pitted→pit，tied→tie，excluded→exclude，forecloses→foreclose，underscores→underscore，stipulates→stipulate，restricting→restrict。音标也必须按原形给，不能把 -ed/-s/-ing 的形式抄进音标。
 6. 不要选过于基础的常用词（the、make、take、good、people、world 之类），这些学生早已掌握。
 7. meaning 必须含中文，不超过 {config.MEANING_MAX} 个字，只给核心义项，不要堆砌。
 8. phonetic 用英式 IPA，必须带斜杠，如 /ɪkˈspænd/。
@@ -242,6 +243,7 @@ def select_words(
     date: str,
     count: int,
     ratio_text: str,
+    vocab: set[str] | None = None,
     log=print,
 ) -> Selection:
     messages = build_messages(article, profile, exclusions, count, ratio_text)
@@ -268,7 +270,7 @@ def select_words(
 
         result = vd.validate(
             attempt.obj, body=article.body, date=date,
-            source=article.title, url=article.url,
+            source=article.title, url=article.url, vocab=vocab,
         )
         last_validation = result
         if result.ok:

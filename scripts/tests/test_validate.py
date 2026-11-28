@@ -205,6 +205,49 @@ class ValidateNotesTest(unittest.TestCase):
         self.assertLessEqual(len(notes), 3)
 
 
+class LemmaTest(unittest.TestCase):
+    VOCAB = {"pit", "tie", "exclude", "foreclose", "underscore", "stipulate", "restrict", "carry", "endure"}
+
+    def test_reduces_to_base(self):
+        cases = {
+            "pitted": "pit", "tied": "tie", "excluded": "exclude",
+            "forecloses": "foreclose", "underscores": "underscore",
+            "stipulates": "stipulate", "restricting": "restrict",
+            "carrying": "carry", "endured": "endure",
+        }
+        for word, base in cases.items():
+            with self.subTest(word=word):
+                self.assertEqual(vd.lemma_of(word, self.VOCAB), base)
+
+    def test_unknown_base_left_alone(self):
+        self.assertIsNone(vd.lemma_of("glorped", self.VOCAB))
+
+    def test_exceptions_not_reduced(self):
+        for word in ("united", "biased", "sophisticated"):
+            with self.subTest(word=word):
+                self.assertIsNone(vd.lemma_of(word, self.VOCAB))
+
+    def test_inflected_headword_rejected_with_hint(self):
+        index = vd.BodyIndex.build(
+            "The case pitted two firms against each other and excluded rivals from the market."
+        )
+        bad = [entry("pitted", example="The case pitted two firms against each other and excluded rivals from the market.",
+                     pos="v.", meaning="使竞争")]
+        words, _, _, dropped = vd.validate_words(bad, index, count_min=1, vocab=self.VOCAB)
+        self.assertEqual(words, [])
+        self.assertIn("原形 pit", dropped[0]["reason"])
+
+    def test_base_form_accepted(self):
+        index = vd.BodyIndex.build(
+            "The case pitted two firms against each other and excluded rivals from the market."
+        )
+        ok = [entry("pit", example="The case pitted two firms against each other and excluded rivals from the market.",
+                    pos="v.", meaning="使竞争")]
+        words, errors, _, _ = vd.validate_words(ok, index, count_min=1, vocab=self.VOCAB)
+        self.assertEqual(errors, [])
+        self.assertEqual(words[0]["word"], "pit")
+
+
 class FullValidateTest(unittest.TestCase):
     def test_metadata_overridden(self):
         obj = {
