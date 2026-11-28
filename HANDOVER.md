@@ -112,25 +112,28 @@
 
 ## 五、文件地图
 
-> 现状以 `README.md` 为准（本节为 2026-11-14 版本，之后新增了 `scripts/daily_words/`、`.github/workflows/`、`data/daily/`，以及 `src/app.js` 内的查词功能）。
+> 现状以 `README.md` 为准（本节已于 2026-11-28 同步）。
 
 ```
 index.html            入口（注意：#app 必须带 .app 类，之前漏过导致布局全坏）
-assets/style.css      全部样式
+assets/style.css      全部样式（含查词对话 .lk-msg/.lk-who/.lk-text）
 assets/emoji/         完成页 3D 插画三张（微软 Fluent Emoji，MIT）
 src/srs.js            调度内核（含 overdueDays、forecast+extraDues、simulateNewLearn）
-src/store.js          localStorage 封装 + 备份恢复 + 自建词书持久化（wl.books.v1）
+src/store.js          localStorage 封装 + 备份恢复 + 自建词书 + 查词收藏 + 删除名单
 src/quiz.js           五种题型的生成与通道映射（spellable() 判断词是否适合拼写）
 src/sync.js           GitHub Contents API 读写 + 合并 + 无变化跳过 + 体积估算（payloadSize）
-src/app.js            视图与会话状态机（阶段机 + 登录门 + 练习模式 + 学习报告导出）
+src/app.js            视图与会话状态机（阶段机 + 登录门 + 练习 + 冲刺 + 查词对话 + 时文词导入）
 data/books.js         词库（手工维护：高考核心高频/选必二/我的积累）
-data/books-generated.js  生成词书（高中3500 3668 词、四级 3739 词、六级增量 2078 词；数据源 kajweb/dict 公开镜像；由 tools/build-books.js 生成，勿手工编辑）
-sw.js                 离线缓存，改资源后记得 bump CACHE 版本号（当前 v26）
-tools/selftest.js     48 项核心自检：node tools/selftest.js
+data/books-generated.js  生成词书（高中3500 3668 词、四级 3739 词、六级增量 2078 词；数据源 kajweb/dict；勿手工编辑）
+data/daily/           每日时文词 JSON（生成器写入，网站自动导入）
+scripts/daily_words/  时文词生成器（纯标准库；含 81 项 Python 测试于 scripts/tests/）
+.github/workflows/    daily-words.yml（定时生成）+ scripts-ci.yml（脚本测试）
+sw.js                 离线缓存，改资源后必须 bump CACHE（当前 v53）
+tools/selftest.js     79 项核心自检：node tools/selftest.js
 tools/build-books.js  大词书重新生成（需先下载源数据，见文件头说明）
 tools/make-icons.js   重新生成图标（纯 Node 手写 PNG 编码）
 改进方向.md           滚动待办清单（做完即删，勿当存档）
-AGNES.md              给 Agnes 的每日扩词设定（数据契约与安全约束）
+AGNES.md              每日时文词的数据契约与安全约束
 HANDOVER.md           本文档
 ```
 
@@ -158,12 +161,15 @@ HANDOVER.md           本文档
 20. **模型会把词性写成 `n. v.`**（空格分隔）：词性解析要按空白也切分，否则整条被判非法。
 21. **模型会把屈折形式当词条**（2026-11-28 实际发生）：`pitted /pɪt/`、`tied`、`excluded`、`restricting` 全被写成词条，音标却是原形的，卡片会对不上。修法：提示词里给出「pitted→pit」这类具体对照（光说"用原形"不管用），再加一道 `lemma_of()` 闸门——用 9692 词的已知词库当白名单，只有能对上的才判为屈折形式并剔除点名，避免把 `united` 误还原成 `unit`。另设 `LEMMA_EXCEPTIONS` 兜住 united/biased/sophisticated 这类本身是形容词的词。
 22. **音标仍可能出错**：词库里的音标是「'」和 `(ə)` 那套旧记法，不能直接覆盖模型的 IPA（`examine` 甚至带 `/ eg-/`）。实测 9 个词里 1 个错（require 写成 /rɪˈkɪə/）。目前只记在产物里，人工发现可 `force` 重生成。
+23. **内置词书的词删了会复活**（2026-11-28）：`data/books.js` 每次启动重建「我的积累」，光从内存 `filter` 掉，刷新就回来。必须写 `wl.mineDel.v1` 删除名单，`mergeLookupIntoMine()` 开头按名单过滤。
+24. **模型输出不能直接进 innerHTML**：追问回答里会带 `**加粗**`。正解是先 `esc()` 转义再放开 `**`（`lkRich()`），顺序反了就是 XSS 口子。
+25. **localStorage 存密钥只防「泄露」，不防「拿到这台机器的人」**：用户问过安全性，已如实说明：公开仓库/备份都不是问题（已剔除），但浏览器里是明文。真要彻底不落地得走服务端代转。
 
 ## 七、验证手段（改完必跑）
 
 ```bash
-node tools/selftest.js          # 48 项，全过才算动过核心
-python -m unittest discover -s scripts/tests -t .   # 每日时文词生成器 78 项
+node tools/selftest.js          # 79 项，全过才算动过核心（含 WL.daily / WL.lookup 的纯逻辑）
+python -m unittest discover -s scripts/tests -t .   # 每日时文词生成器 81 项
 ```
 
 2026-11-14 做过一轮浏览器端全流程实测（本地 http 服务 + 自动答题驱动），覆盖：学一个测一个、答错退回重考、复习段优先、拼写环节开始/跳过/错词重拼、结算对账、调度双通道落库。改会话流程时建议照此重测。注意：浏览器自动化工具（node_repl/IAB）不一定有；没有时靠 selftest + 用户网页验收。
@@ -180,7 +186,7 @@ python -m unittest discover -s scripts/tests -t .   # 每日时文词生成器 7
 
 注意：`sync.js` 的 `mergeLog` 是字段白名单，**给日志加新字段必须同步补进 mergeLog**（fzg/fz 已加，漏了就会被同步清掉）。
 
-目标：每天自动产出 `data/daily/<日期>.json`，网站「词表 → 每日时文词 → 检查并导入」变成一本独立词书。
+目标：每天自动产出 `data/daily/<日期>.json`，网站自动并入《时文积累》词书（早期版本是一天一本 `时文 · 日期`，现已合并，旧书会自动迁移）。
 
 - 调度：`.github/workflows/daily-words.yml`，cron `0 22 * * *`（北京 06:00），并发组 `daily-words` 防撞车；`scripts-ci.yml` 在改动 `scripts/**` 时跑测试（3.10 / 3.12 双版本）
 - 代码：`scripts/daily_words/`，**零第三方依赖**（只用标准库），因此 CI 不需要 pip install，也不会因为某个包更新而挂
@@ -211,7 +217,31 @@ python -m unittest discover -s scripts/tests -t .   # 每日时文词生成器 7
 - 生成器侧 `learner.read_daily_history` 先查 `books['daily']`，再兼容旧的 `books['daily-<日期>']`，否则难度阶梯会突然读不到数据。
 - 代价：这本书会一直长（一年约 4000–5000 词、几百 KB）。真顶到 localStorage 上限时，优先按年份拆分。
 
-## 九、下一步候选
+## 九、查词与「我的积累」（2026-11-28 上线）
+
+一句话：查词是**对话式**的，首轮出词条、之后可连续追问，首轮可收藏；收藏落在「我的积累」，而这本书里「斩」等于**删除**。
+
+### 查词
+
+- 视图 `viewLookup()`，状态在 `S.lookup = { msgs, loading, error, collect, q }`；`msgs` 是 `{role, text, result?}`，只有首轮那条带 `result`（结构化词条）。
+- 两个系统提示：`LOOKUP_SYSTEM`（首轮，要求只输出 JSON）与 `LOOKUP_FOLLOW_SYSTEM`（追问，要求纯文本）。
+- 请求统一走 `agnesChat(messages, key, isFollow)`：首轮加 `response_format: json_object`，追问不加；追问只带最近 **8 条**上下文（再长就截断，控制成本）。
+- 追问回答渲染：`lkRich()` = 先 `esc()` 转义 → 只放开 `**加粗**` → 行首 `*`/`-` 换圆点。**绝不把模型原文直接塞 innerHTML**。
+- 容错：首轮失败把词留在输入框（`st.q`）方便重试；追问失败保留用户那句提问，只显示错误。
+
+### 我的积累
+
+- 收藏写入 `wl.lookup.v1`（`store.saveLookupWord`），启动时 `mergeLookupIntoMine()` 把词并进内置书 `mine`，按小写去重。
+- 这本书里斩词走 `cutMineWord()`：从 `mine.words` 移除 → 删进度 → 移出收藏 → **写进 `wl.mineDel.v1` 删除名单**。少最后一步，刷新后 `books.js` 会把它重建回来（踩过）。
+- 重新收藏同一个词时会 `removeMineRemoved()` 把它放出来。
+- 其他书的斩仍然走 `markCut()`（打标记、不删词条），两条分支不要混。
+
+### 密钥
+
+- 存在 `wl.config.v1` 的 `lookupKey`，本机明文。四个出口都堵了：代码里没有、仓库里没有、不同步、`exportAll()` 里 `delete cfg.lookupKey`。
+- `lockOut()`（退出登录 / 令牌失效 / 被踢回锁屏）会 `setConfig({lookupKey: ''})`，下次用要重填。这是用户明确要求的「临时用」。
+
+## 十、下一步候选
 
 - 其余功能待办看 `改进方向.md`（中断恢复、导入 CSV 转义、统计趋势、词条纠错、同步拆分等）
 - 题型扩展：听音辨义 / 语境填词接口已在 quiz.js，设置里把灰显行改成开关即可
@@ -219,3 +249,5 @@ python -m unittest discover -s scripts/tests -t .   # 每日时文词生成器 7
 - 牛津高阶整本不建议收录（版权 + 5 万词条负担）；若要"生词查询"能力，后续可接 ECDICT 数据做查询面板
 - 同步冲突的边界：两台机器同一秒答题理论上仍会以后写者为准，可忽略
 - PWA 已就绪（manifest + sw），手机「添加到主屏幕」即可离线（用户目前不用手机端）
+- **查词的两个已知缺口**（用户已知情，暂未做）：① 追问只带最近 8 条上下文，超过 8 轮会丢最早的对话；② 「已收藏」列表只能看，删词要进「我的积累」做题时删。要补都很小：前者改 `followUp()` 里的 `slice(-8)`，后者在列表项上加个删除按钮调 `store.removeLookupWord` + `addMineRemoved`
+- **查词可选的加固**：把 Agnes Key 从前端移到服务端代转（云服务 LLM 模块）。当时用户关掉了云服务开通确认弹窗，所以走了本机 key 路线；要换的话需要用户重新确认开通
