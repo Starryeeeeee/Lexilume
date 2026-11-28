@@ -1667,6 +1667,7 @@ window.WL = window.WL || {};
     return {
       book: {
         id: 'daily-' + (date || Date.now().toString(36)),
+        date: date,
         name: '时文 · ' + date,
         note: (data.source || '时文词表') + ' · ' + words.length + ' 词',
         words: words,
@@ -1675,7 +1676,110 @@ window.WL = window.WL || {};
     };
   }
 
-  function importDailyFile(file) {
+  /* ---- 时文词统一累积到一本《时文积累》，不再一天一本 ---- */
+
+  var DAILY_ID = 'daily';
+  var DAILY_NAME = '时文积累';
+
+  function dailyBook() {
+    var list = WL.books || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === DAILY_ID) return list[i];
+    }
+    return null;
+  }
+
+  function ensureDailyBook() {
+    var b = dailyBook();
+    if (b) {
+      if (!b.words) b.words = [];
+      if (!b.notes) b.notes = [];
+      return b;
+    }
+    b = { id: DAILY_ID, name: DAILY_NAME, note: '每日时文词自动累积', words: [], notes: [] };
+    WL.books = (WL.books || []).concat([b]);
+    return b;
+  }
+
+  // 把一份时文词表并进《时文积累》：按单词去重，词 id 沿用 daily-<日期>-<序号>
+  function addWordsToDaily(parsed, cache) {
+    var b = ensureDailyBook();
+    var have = {};
+    b.words.forEach(function (w) { var k = (w.w || '').toLowerCase(); if (k) have[k] = 1; });
+    var added = 0;
+    parsed.book.words.forEach(function (w, i) {
+      var k = (w.w || '').toLowerCase();
+      if (!k || have[k]) return;
+      w.id = parsed.book.id + '-' + i;
+      have[k] = 1;
+      b.words.push(w);
+      added++;
+    });
+    (parsed.book.notes || []).forEach(function (n) {
+      if (b.notes.length < 200) b.notes.push(n);
+    });
+    b.note = '每日时文词自动累积 · 最近 ' + parsed.book.date + ' · 共 ' + b.words.length + ' 词';
+    WL.store.upsertUserBook(b);
+    (cache || bookCache)[b.id] = null;
+    return { added: added, total: b.words.length };
+  }
+
+  // 老版本是「一天一本」（daily-2026-11-28）：并进《时文积累》，词 id 不变，进度整块搬过去
+  function migrateDailyBooks(cache, silent) {
+    var cc = cache || bookCache;
+    var olds = (WL.books || []).filter(function (b) {
+      if (!/^daily-\d{4}-\d{2}-\d{2}$/.test(b.id)) return false;
+      var ws = b.words || [];
+      return ws.length > 0 && ws.every(function (w) {
+        return String(w.id || '').indexOf(b.id + '-') === 0;
+      });
+    });
+    if (!olds.length) return 0;
+
+    var merged = ensureDailyBook();
+    var have = {};
+    merged.words.forEach(function (w) { var k = (w.w || '').toLowerCase(); if (k) have[k] = 1; });
+    var moved = 0;
+
+    olds.forEach(function (b) {
+      var prog = WL.store.getProgress(b.id);
+      Object.keys(prog).forEach(function (wid) {
+        WL.store.putProgress(DAILY_ID, wid, prog[wid]);
+      });
+      (b.words || []).forEach(function (w) {
+        var k = (w.w || '').toLowerCase();
+        if (!k || have[k]) return;
+        have[k] = 1;
+        merged.words.push(w);
+        moved++;
+      });
+      WL.books = (WL.books || []).filter(function (x) { return x.id !== b.id; });
+      WL.store.removeUserBook(b.id);
+      WL.store.resetBook(b.id);
+      delete cc[b.id];
+    });
+
+    WL.store.flush();
+    merged.note = '每日时文词自动累积 · 共 ' + merged.words.length + ' 词';
+    WL.store.upsertUserBook(merged);
+    cc[merged.id] = null;
+
+    var cfg = WL.store.getConfig();
+    var alive = (WL.books || []).some(function (x) { return x.id === cfg.book; });
+    if (!alive) {
+      WL.store.setConfig({ book: DAILY_ID });
+      S.bookId = DAILY_ID;
+    }
+    if (moved && !silent) {
+      // 延迟提示，避免在渲染过程中再次触发 render
+      setTimeout(function () {
+        toast('已把 ' + olds.length + ' 天的时文词合并到《' + DAILY_NAME + '》');
+      }, 800);
+    }
+    return moved;
+  }
+
+  function importDailyFile(file, opts) {
     var c = WL.sync.get();
     return ghApi('/repos/' + c.owner + '/' + c.repo + '/contents/data/daily/' + encodeURIComponent(file.name) + '?ref=' + (c.branch || 'main'))
       .then(function (r) {
@@ -1688,20 +1792,62 @@ window.WL = window.WL || {};
         }
         var parsed = parseDaily(data);
         if (!parsed) return { ok: false, msg: '词表为空或格式不符合契约（见 AGNES.md）' };
-        parsed.book.words.forEach(function (w, i) { w.id = parsed.book.id + '-' + i; });
-        WL.books.push(parsed.book);
-        WL.store.upsertUserBook(parsed.book);
-        bookCache[parsed.book.id] = null;
+        var res = addWordsToDaily(parsed);
         WL.store.markDailyImported(file.name);
-        WL.store.setConfig({ book: parsed.book.id });
-        S.bookId = parsed.book.id;
-        return { ok: true, name: parsed.book.name };
+        if (!opts || !opts.silent) {
+          WL.store.setConfig({ book: DAILY_ID });
+          S.bookId = DAILY_ID;
+        }
+        return { ok: true, name: DAILY_NAME, added: res.added, total: res.total };
       });
+  }
+
+  WL.daily = {
+    ID: DAILY_ID,
+    NAME: DAILY_NAME,
+    find: dailyBook,
+    ensure: ensureDailyBook,
+    addWords: addWordsToDaily,
+    migrate: migrateDailyBooks
+  };
+
+  // 打开词表页时静默检查：有没导入过的就并入《时文积累》。十分钟内只查一次。
+  var autoDaily = { busy: false, last: 0 };
+
+  function autoImportDaily() {
+    if (autoDaily.busy || !WL.sync.configured()) return;
+    if (Date.now() - autoDaily.last < 10 * 60 * 1000) return;
+    autoDaily.busy = true;
+    autoDaily.last = Date.now();
+    var imported = 0, words = 0;
+
+    fetchDailyList().then(function (files) {
+      var pending = files.filter(function (f) {
+        return !WL.store.isDailyImported(f.name);
+      }).slice(0, 5);
+      var chain = Promise.resolve();
+      pending.forEach(function (f) {
+        chain = chain.then(function () {
+          return importDailyFile(f, { silent: true }).then(function (r) {
+            if (r && r.ok) { imported++; words += r.added || 0; }
+          }).catch(function () { /* 单份失败不影响其他 */ });
+        });
+      });
+      return chain;
+    }).then(function () {
+      autoDaily.busy = false;
+      if (imported) toast('已导入 ' + imported + ' 天时文词，新增 ' + words + ' 词');
+    }).catch(function () {
+      autoDaily.busy = false;
+    });
   }
 
   /* ============ 词表 ============ */
 
   function viewBooks() {
+    // 先把老的「一天一本」并进《时文积累》，再静默拉取新词表
+    migrateDailyBooks();
+    autoImportDaily();
     var cfg = WL.store.getConfig();
     var wrap = el('div', 'stack');
 
@@ -1847,9 +1993,9 @@ window.WL = window.WL || {};
 
     var daily = el('div', 'card');
     daily.appendChild(el('h2', 'section', '每日时文词'));
-    daily.appendChild(h('<div class="small muted" style="margin-bottom:12px">Agnes 每天从 China Daily 选词生成词表，放在仓库 <code>data/daily/</code> 里。点下面检查并一键导入为独立词书。</div>'));
+    daily.appendChild(h('<div class="small muted" style="margin-bottom:12px">Agnes 每天从 China Daily 选词生成词表，放在仓库 <code>data/daily/</code> 里。打开本页会自动导入到《时文积累》，也可以手动检查。</div>'));
     var drow = el('div', 'row');
-    var checkBtn = el('button', 'btn primary', '检查远端时文词表');
+    var checkBtn = el('button', 'btn primary', '检查并导入');
     drow.appendChild(checkBtn);
     daily.appendChild(drow);
     var dList = el('div');
@@ -1859,7 +2005,7 @@ window.WL = window.WL || {};
       checkBtn.textContent = '检查中…';
       fetchDailyList().then(function (files) {
         checkBtn.disabled = false;
-        checkBtn.textContent = '检查远端时文词表';
+        checkBtn.textContent = '检查并导入';
         dList.innerHTML = '';
         if (!files.length) {
           dList.appendChild(h('<div class="small muted">data/daily/ 里还没有文件。等 Agnes 生成后再来检查。</div>'));
@@ -1878,7 +2024,7 @@ window.WL = window.WL || {};
               ib.textContent = '导入中…';
               importDailyFile(f).then(function (r) {
                 if (r.ok) {
-                  toast('已导入「' + r.name + '」');
+                  toast(r.added ? ('已加入《' + r.name + '》，新增 ' + r.added + ' 词') : ('《' + r.name + '》里已有这些词'));
                   render();
                 } else {
                   ib.disabled = false;
@@ -1897,7 +2043,7 @@ window.WL = window.WL || {};
         });
       }).catch(function (e) {
         checkBtn.disabled = false;
-        checkBtn.textContent = '检查远端时文词表';
+        checkBtn.textContent = '检查并导入';
         toast('检查失败：' + (e.message || '网络错误'));
       });
     };
@@ -2765,6 +2911,10 @@ window.WL = window.WL || {};
 
     // 连胜保护：先把缺失的天用库存冻结补上（可能不止一张），再谈断点续学
     var frozenUsed = WL.store.applyStreakFreezes();
+
+    // 时文词：开机就顺手检查一次（十分钟节流），不必等用户点进词表页
+    migrateDailyBooks();
+    setTimeout(autoImportDaily, 2000);
 
     // 断点续学：有未完成会话快照时先询问
     var saved = WL.store.getSession();

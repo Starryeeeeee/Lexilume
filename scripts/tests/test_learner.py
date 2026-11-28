@@ -114,6 +114,46 @@ class LadderTest(unittest.TestCase):
         self.assertEqual(learner.decide_ladder(hist)[0], 0)
 
 
+class HistoryTest(unittest.TestCase):
+    """网站把时文词并进一本《时文积累》（id=daily），历史统计要能顺着新书找到复习记录。"""
+
+    def _dir(self, words):
+        import json
+        import pathlib
+        import tempfile
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        base = pathlib.Path(tmp.name)
+        (base / "2026-11-28.json").write_text(
+            json.dumps({"date": "2026-11-28", "words": [{"word": w} for w in words]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return base
+
+    def test_reads_merged_book(self):
+        base = self._dir(["abuse", "verdict"])
+        progress = {"books": {"daily": {
+            "daily-2026-11-28-0": state(5, lapses=1),
+            "daily-2026-11-28-1": state(5, lapses=0),
+        }}}
+        hist = learner.read_daily_history(base, progress)
+        self.assertEqual(len(hist), 1)
+        self.assertEqual(hist[0].seen, 2)
+        self.assertEqual(hist[0].lapsed, 1)
+
+    def test_compat_with_per_day_book(self):
+        base = self._dir(["abuse"])
+        progress = {"books": {"daily-2026-11-28": {"daily-2026-11-28-0": state(5, lapses=1)}}}
+        hist = learner.read_daily_history(base, progress)
+        self.assertEqual(hist[0].seen, 1)
+        self.assertEqual(hist[0].lapsed, 1)
+
+    def test_no_progress_is_ignored(self):
+        base = self._dir(["abuse"])
+        hist = learner.read_daily_history(base, {"books": {}})
+        self.assertEqual(hist[0].seen, 0)
+
+
 class ExclusionTest(unittest.TestCase):
     def test_only_words_in_body(self):
         body = "The government promoted new policies, but the artist stayed quiet."

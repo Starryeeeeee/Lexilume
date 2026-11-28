@@ -207,7 +207,9 @@ def read_daily_history(daily_dir: Path, progress: dict, limit: int = 10) -> list
         except (TypeError, ValueError):
             shift = 0
         batch = DailyBatch(date=dates, words=words, shift=shift)
-        states = books.get(f"daily-{dates}") or {}
+        # 新版网站把所有时文词累积进同一本《时文积累》（书 id 固定为 daily），
+        # 旧版是按天一本（daily-<日期>）。两种都认，词 id 仍是 daily-<日期>-<序号>。
+        states = books.get("daily") or books.get(f"daily-{dates}") or {}
         for i, _ in enumerate(words):
             st = states.get(f"daily-{dates}-{i}")
             if not st:

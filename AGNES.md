@@ -78,8 +78,8 @@
 
 - 网站只读 `date / source / url / words / notes`，`meta` 是审计字段，前端忽略。
   下一批的难度带就从 `meta.difficultyShift` 继续。
-- `date` 与文件名必须一致：网站用 `daily-<date>` 作词书 id、`daily-<date>-<序号>` 作词 id，
-  生成器靠这个约定把复习记录反查成词。
+- `date` 与文件名必须一致。网站把所有时文词累积进同一本《时文积累》（词书 id 固定为 `daily`），
+  词 id 仍是 `daily-<日期>-<序号>`；生成器按这个约定把复习记录反查成词（先找 `daily`，再兼容旧的 `daily-<日期>`）。
 
 ## 五、校验闸门（不通过就不落盘）
 

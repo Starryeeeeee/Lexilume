@@ -275,5 +275,79 @@ const mergedD = WL.sync.mergeLog(
 );
 ok('合并保留 fzg/fz 字段', mergedD['2026-11-20'].fzg === 1 && mergedD['2026-11-20'].fz === 1 && mergedD['2026-11-21'].fzg === 1);
 
+
+// ---------------------------------------------------------------- 时文词合并
+// app.js 需要 DOM，这里给最小桩，只为了能取到 WL.daily 那几条纯逻辑
+console.log('\n[11] 时文词合并（WL.daily）');
+const ls3 = {
+  _d: {},
+  getItem(k) { return Object.prototype.hasOwnProperty.call(this._d, k) ? this._d[k] : null; },
+  setItem(k, v) { this._d[k] = String(v); },
+  removeItem(k) { delete this._d[k]; }
+};
+const docStub = {
+  readyState: 'loading',
+  addEventListener() {},
+  createElement() { return { style: {}, appendChild() {}, setAttribute() {} }; },
+  querySelector() { return null; },
+  body: {}
+};
+const ctx3 = {
+  console,
+  document: docStub,
+  window: { addEventListener() {}, WL: {} },
+  localStorage: ls3,
+  navigator: {},
+  setTimeout,
+  clearTimeout,
+  Promise
+};
+vm.createContext(ctx3);
+['src/srs.js', 'src/store.js', 'src/quiz.js', 'src/sync.js', 'src/app.js'].forEach(function (f) {
+  vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx3, { filename: f });
+});
+const W3 = ctx3.window.WL;
+const D3 = W3.daily;
+ok('WL.daily 已导出', !!(D3 && D3.addWords && D3.migrate));
+
+// 用手写的 store 桩，避免碰真 localStorage 的容量与格式
+const storeStub = {
+  prog: {},
+  upsertUserBook() {},
+  getProgress(id) {
+    if (!this.prog[id]) this.prog[id] = {};
+    return this.prog[id];
+  },
+  putProgress(id, wid, st) {
+    if (!this.prog[id]) this.prog[id] = {};
+    this.prog[id][wid] = st;
+  },
+  flush() {},
+  removeUserBook() {},
+  resetBook(id) { delete this.prog[id]; },
+  getConfig() { return { book: 'gk' }; },
+  setConfig() {}
+};
+W3.store = storeStub;
+W3.books = [{ id: 'gk', name: 'gk', words: [] }];
+
+const r1 = D3.addWords({ book: { id: 'daily-2026-11-28', date: '2026-11-28', words: [{ w: 'alpha' }, { w: 'beta' }], notes: [] } }, {});
+ok('首份导入新增 2 词', r1.added === 2 && r1.total === 2, JSON.stringify(r1));
+ok('词 id 可复现', D3.find(W3.books).words[0].id === 'daily-2026-11-28-0');
+
+const r2 = D3.addWords({ book: { id: 'daily-2026-11-29', date: '2026-11-29', words: [{ w: 'beta' }, { w: 'gamma' }], notes: [] } }, {});
+ok('跨天按单词去重', r2.added === 1 && r2.total === 3, JSON.stringify(r2));
+ok('只存在一本时文书', W3.books.filter(function (b) { return b.id === 'daily'; }).length === 1);
+
+// 迁移：老版本的一天一本 → 合并，进度整块搬过去
+storeStub.prog = { 'daily-2026-11-20': { 'daily-2026-11-20-0': { reps: 3, lapses: 1 } } };
+W3.books.push({ id: 'daily-2026-11-20', name: '时文 · 2026-11-20', words: [{ id: 'daily-2026-11-20-0', w: 'delta' }] });
+const moved = D3.migrate({}, true);
+ok('迁移吸收 1 词', moved === 1, String(moved));
+ok('旧书已移除', !W3.books.some(function (b) { return b.id === 'daily-2026-11-20'; }));
+ok('进度搬到 daily 且键不变', !!(storeStub.prog.daily && storeStub.prog.daily['daily-2026-11-20-0']));
+ok('旧进度键已清理', !storeStub.prog['daily-2026-11-20']);
+ok('迁移可重复执行', D3.migrate({}, true) === 0);
+
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败\n');
 process.exit(fail ? 1 : 0);

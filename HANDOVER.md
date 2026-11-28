@@ -198,6 +198,15 @@ python -m unittest discover -s scripts/tests -t .   # 每日时文词生成器 7
 
 **唯一需要人工做的**：仓库 Settings → Secrets 加 `AGNES_API_KEY`。没加时工作流会红并开 issue，不会静默失败。
 
+### 时文词只累积一本（2026-11-28 改）
+
+- 所有时文词并进 `id='daily'`、名叫《时文积累》的一本书，按**单词**去重；词 id 仍是 `daily-<日期>-<序号>`，跨天唯一、可复现。
+- `WL.daily`（`src/app.js`）导出 `find / ensure / addWords / migrate` 四条纯逻辑，`tools/selftest.js` 第 [11] 节直接测它们（含迁移时进度整块搬运、可重复执行）。
+- 打开网站就自动导入（`boot` 里 `setTimeout(autoImportDaily, 2000)`），进词表页也会触发，十分钟节流一次；手动「检查并导入」按钮保留。
+- 老版本按天一本的 `daily-YYYY-MM-DD` 会在首次打开时被 `migrateDailyBooks()` 吸收：**进度按词 id 原样搬到 `daily`**，旧书与旧进度键清掉，`cfg.book` 若指向被删的书会自动切到 `daily`。
+- 生成器侧 `learner.read_daily_history` 先查 `books['daily']`，再兼容旧的 `books['daily-<日期>']`，否则难度阶梯会突然读不到数据。
+- 代价：这本书会一直长（一年约 4000–5000 词、几百 KB）。真顶到 localStorage 上限时，优先按年份拆分。
+
 ## 九、下一步候选
 
 - 其余功能待办看 `改进方向.md`（中断恢复、导入 CSV 转义、统计趋势、词条纠错、同步拆分等）
